@@ -1,12 +1,12 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:klayvio_sdk/klayvio_sdk_method_channel.dart';
+import 'package:klaviyo_sdk/klaviyo_sdk_method_channel.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  MethodChannelKlayvioSdk platform = MethodChannelKlayvioSdk();
-  const MethodChannel channel = MethodChannel('klayvio_sdk');
+  MethodChannelKlaviyoSdk platform = MethodChannelKlaviyoSdk();
+  const MethodChannel channel = MethodChannel('klaviyo_sdk');
 
   setUp(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(

@@ -2,10 +2,10 @@ import Flutter
 import UIKit
 import KlaviyoSwift
 
-public class KlayvioSdkPlugin: NSObject, FlutterPlugin {
+public class KlaviyoSdkPlugin: NSObject, FlutterPlugin {
   public static func register(with registrar: FlutterPluginRegistrar) {
-    let channel = FlutterMethodChannel(name: "klayvio_sdk", binaryMessenger: registrar.messenger())
-    let instance = KlayvioSdkPlugin()
+    let channel = FlutterMethodChannel(name: "klaviyo_sdk", binaryMessenger: registrar.messenger())
+    let instance = KlaviyoSdkPlugin()
     registrar.addMethodCallDelegate(instance, channel: channel)
     
     // Register for application lifecycle notifications to handle push token

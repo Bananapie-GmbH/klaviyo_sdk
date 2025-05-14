@@ -1,29 +1,29 @@
 // import 'package:flutter_test/flutter_test.dart';
-// import 'package:klayvio_sdk/klayvio_sdk.dart';
-// import 'package:klayvio_sdk/klayvio_sdk_platform_interface.dart';
-// import 'package:klayvio_sdk/klayvio_sdk_method_channel.dart';
+// import 'package:klaviyo_sdk/klaviyo_sdk.dart';
+// import 'package:klaviyo_sdk/klaviyo_sdk_platform_interface.dart';
+// import 'package:klaviyo_sdk/klaviyo_sdk_method_channel.dart';
 // import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 
-// class MockKlayvioSdkPlatform
+// class MockKlaviyoSdkPlatform
 //     with MockPlatformInterfaceMixin
-//     implements KlayvioSdkPlatform {
+//     implements KlaviyoSdkPlatform {
 
 //   @override
 //   Future<String?> getPlatformVersion() => Future.value('42');
 // }
 
 // void main() {
-//   final KlayvioSdkPlatform initialPlatform = KlayvioSdkPlatform.instance;
+//   final KlaviyoSdkPlatform initialPlatform = KlaviyoSdkPlatform.instance;
 
-//   test('$MethodChannelKlayvioSdk is the default instance', () {
-//     expect(initialPlatform, isInstanceOf<MethodChannelKlayvioSdk>());
+//   test('$MethodChannelKlaviyoSdk is the default instance', () {
+//     expect(initialPlatform, isInstanceOf<MethodChannelKlaviyoSdk>());
 //   });
 
 //   test('getPlatformVersion', () async {
-//     KlayvioSdk klayvioSdkPlugin = KlayvioSdk();
-//     MockKlayvioSdkPlatform fakePlatform = MockKlayvioSdkPlatform();
-//     KlayvioSdkPlatform.instance = fakePlatform;
+//     KlaviyoSdk klaviyoSdkPlugin = KlaviyoSdk();
+//     MockKlaviyoSdkPlatform fakePlatform = MockKlaviyoSdkPlatform();
+//     KlaviyoSdkPlatform.instance = fakePlatform;
 
-//     expect(await klayvioSdkPlugin.getPlatformVersion(), '42');
+//     expect(await klaviyoSdkPlugin.getPlatformVersion(), '42');
 //   });
 // }

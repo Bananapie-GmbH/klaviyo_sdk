@@ -1,34 +1,34 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'klayvio_sdk_platform_interface.dart';
+import 'klaviyo_sdk_platform_interface.dart';
 
-class KlayvioSdk {
-  KlayvioSdk._();
+class KlaviyoSdk {
+  KlaviyoSdk._();
 
-  static final KlayvioSdk _instance = KlayvioSdk._();
+  static final KlaviyoSdk _instance = KlaviyoSdk._();
 
   bool _initialized = false;
 
-  /// get the instance of the [KlayvioSdk].
-  static KlayvioSdk get instance => _instance;
+  /// get the instance of the [KlaviyoSdk].
+  static KlaviyoSdk get instance => _instance;
 
   Future<String?> getPlatformVersion() {
-    return KlayvioSdkPlatform.instance.getPlatformVersion();
+    return KlaviyoSdkPlatform.instance.getPlatformVersion();
   }
 
   /// Initialize the Klaviyo SDK with your public API key
   Future<bool> initialize(String apiKey) async {
     try {
-      final success = await KlayvioSdkPlatform.instance.initialize(apiKey);
+      final success = await KlaviyoSdkPlatform.instance.initialize(apiKey);
       if (success) {
         _initialized = true;
-        debugPrint("Klayvio SDK: KlayvioSdk initialized successfully");
+        debugPrint("Klaviyo SDK: KlaviyoSdk initialized successfully");
       } else {
-        debugPrint("Klayvio SDK: KlayvioSdk initialization returned false");
+        debugPrint("Klaviyo SDK: KlaviyoSdk initialization returned false");
       }
       return success;
     } catch (e) {
-      debugPrint("Klayvio SDK: Error initializing KlayvioSdk: $e");
+      debugPrint("Klaviyo SDK: Error initializing KlaviyoSdk: $e");
       return false;
     }
   }
@@ -45,10 +45,10 @@ class KlayvioSdk {
     try {
       if (!_initialized) {
         debugPrint(
-            "Klayvio SDK: Warning! KlayvioSdk not initialized before setProfile call");
+            "Klaviyo SDK: Warning! KlaviyoSdk not initialized before setProfile call");
       }
 
-      final success = await KlayvioSdkPlatform.instance.setProfile(
+      final success = await KlaviyoSdkPlatform.instance.setProfile(
         email: email,
         phoneNumber: phoneNumber,
         externalId: externalId,
@@ -58,14 +58,14 @@ class KlayvioSdk {
       );
 
       if (success) {
-        debugPrint("Klayvio SDK: Profile set successfully");
+        debugPrint("Klaviyo SDK: Profile set successfully");
       } else {
-        debugPrint("Klayvio SDK: Setting profile returned false");
+        debugPrint("Klaviyo SDK: Setting profile returned false");
       }
 
       return success;
     } catch (e) {
-      debugPrint("Klayvio SDK: Error setting profile: $e");
+      debugPrint("Klaviyo SDK: Error setting profile: $e");
       return false;
     }
   }
@@ -75,20 +75,20 @@ class KlayvioSdk {
     try {
       if (!_initialized) {
         debugPrint(
-            "Klayvio SDK: Warning! KlayvioSdk not initialized before resetProfile call");
+            "Klaviyo SDK: Warning! KlaviyoSdk not initialized before resetProfile call");
       }
 
-      final success = await KlayvioSdkPlatform.instance.resetProfile();
+      final success = await KlaviyoSdkPlatform.instance.resetProfile();
 
       if (success) {
-        debugPrint("Klayvio SDK: Profile reset successfully");
+        debugPrint("Klaviyo SDK: Profile reset successfully");
       } else {
-        debugPrint("Klayvio SDK: Resetting profile returned false");
+        debugPrint("Klaviyo SDK: Resetting profile returned false");
       }
 
       return success;
     } catch (e) {
-      debugPrint("Klayvio SDK: Error resetting profile: $e");
+      debugPrint("Klaviyo SDK: Error resetting profile: $e");
       return false;
     }
   }
@@ -102,24 +102,24 @@ class KlayvioSdk {
     try {
       if (!_initialized) {
         debugPrint(
-            "Klayvio SDK: Warning! KlayvioSdk not initialized before createEvent call");
+            "Klaviyo SDK: Warning! KlaviyoSdk not initialized before createEvent call");
       }
 
-      final success = await KlayvioSdkPlatform.instance.createEvent(
+      final success = await KlaviyoSdkPlatform.instance.createEvent(
         name: name,
         properties: properties,
         value: value,
       );
 
       if (success) {
-        debugPrint("Klayvio SDK: Event '$name' created successfully");
+        debugPrint("Klaviyo SDK: Event '$name' created successfully");
       } else {
-        debugPrint("Klayvio SDK: Creating event '$name' returned false");
+        debugPrint("Klaviyo SDK: Creating event '$name' returned false");
       }
 
       return success;
     } catch (e) {
-      debugPrint("Klayvio SDK: Error creating event '$name': $e");
+      debugPrint("Klaviyo SDK: Error creating event '$name': $e");
       return false;
     }
   }
@@ -129,23 +129,23 @@ class KlayvioSdk {
     try {
       if (!_initialized) {
         debugPrint(
-            "Klayvio SDK: Warning! KlayvioSdk not initialized before registerForPushNotifications call");
+            "Klaviyo SDK: Warning! KlaviyoSdk not initialized before registerForPushNotifications call");
       }
 
       final success =
-          await KlayvioSdkPlatform.instance.registerForPushNotifications();
+          await KlaviyoSdkPlatform.instance.registerForPushNotifications();
 
       if (success) {
         debugPrint(
-            "Klayvio SDK: Registered for push notifications successfully");
+            "Klaviyo SDK: Registered for push notifications successfully");
       } else {
         debugPrint(
-            "Klayvio SDK: Registering for push notifications returned false");
+            "Klaviyo SDK: Registering for push notifications returned false");
       }
 
       return success;
     } catch (e) {
-      debugPrint("Klayvio SDK: Error registering for push notifications: $e");
+      debugPrint("Klaviyo SDK: Error registering for push notifications: $e");
       return false;
     }
   }
@@ -159,20 +159,20 @@ class KlayvioSdk {
     try {
       if (!_initialized) {
         debugPrint(
-            "Klayvio SDK: Warning! KlayvioSdk not initialized before setPushToken call");
+            "Klaviyo SDK: Warning! KlaviyoSdk not initialized before setPushToken call");
       }
 
-      final success = await KlayvioSdkPlatform.instance.setPushToken(token);
+      final success = await KlaviyoSdkPlatform.instance.setPushToken(token);
 
       if (success) {
-        debugPrint("Klayvio SDK: Push token set successfully");
+        debugPrint("Klaviyo SDK: Push token set successfully");
       } else {
-        debugPrint("Klayvio SDK: Setting push token returned false");
+        debugPrint("Klaviyo SDK: Setting push token returned false");
       }
 
       return success;
     } catch (e) {
-      debugPrint("Klayvio SDK: Error setting push token: $e");
+      debugPrint("Klaviyo SDK: Error setting push token: $e");
       return false;
     }
   }

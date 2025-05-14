@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 
 import 'package:flutter/services.dart';
-import 'package:klayvio_sdk/klayvio_sdk.dart';
+import 'package:klaviyo_sdk/klaviyo_sdk.dart';
 
 void main() {
   runApp(const MyApp());
@@ -16,7 +16,7 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  final _klaviyoSdk = KlayvioSdk.instance;
+  final _klaviyoSdk = KlaviyoSdk.instance;
 
   @override
   void initState() {

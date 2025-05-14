@@ -1,24 +1,24 @@
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 
-import 'klayvio_sdk_method_channel.dart';
+import 'klaviyo_sdk_method_channel.dart';
 
-abstract class KlayvioSdkPlatform extends PlatformInterface {
-  /// Constructs a KlayvioSdkPlatform.
-  KlayvioSdkPlatform() : super(token: _token);
+abstract class KlaviyoSdkPlatform extends PlatformInterface {
+  /// Constructs a KlaviyoSdkPlatform.
+  KlaviyoSdkPlatform() : super(token: _token);
 
   static final Object _token = Object();
 
-  static KlayvioSdkPlatform _instance = MethodChannelKlayvioSdk();
+  static KlaviyoSdkPlatform _instance = MethodChannelKlaviyoSdk();
 
-  /// The default instance of [KlayvioSdkPlatform] to use.
+  /// The default instance of [KlaviyoSdkPlatform] to use.
   ///
-  /// Defaults to [MethodChannelKlayvioSdk].
-  static KlayvioSdkPlatform get instance => _instance;
+  /// Defaults to [MethodChannelKlaviyoSdk].
+  static KlaviyoSdkPlatform get instance => _instance;
 
   /// Platform-specific implementations should set this with their own
-  /// platform-specific class that extends [KlayvioSdkPlatform] when
+  /// platform-specific class that extends [KlaviyoSdkPlatform] when
   /// they register themselves.
-  static set instance(KlayvioSdkPlatform instance) {
+  static set instance(KlaviyoSdkPlatform instance) {
     PlatformInterface.verifyToken(instance, _token);
     _instance = instance;
   }

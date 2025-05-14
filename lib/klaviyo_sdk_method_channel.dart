@@ -1,13 +1,13 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
-import 'klayvio_sdk_platform_interface.dart';
+import 'klaviyo_sdk_platform_interface.dart';
 
-/// An implementation of [KlayvioSdkPlatform] that uses method channels.
-class MethodChannelKlayvioSdk extends KlayvioSdkPlatform {
+/// An implementation of [KlaviyoSdkPlatform] that uses method channels.
+class MethodChannelKlaviyoSdk extends KlaviyoSdkPlatform {
   /// The method channel used to interact with the native platform.
   @visibleForTesting
-  final methodChannel = const MethodChannel('klayvio_sdk');
+  final methodChannel = const MethodChannel('klaviyo_sdk');
 
   @override
   Future<String?> getPlatformVersion() async {

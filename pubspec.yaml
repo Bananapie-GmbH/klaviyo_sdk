@@ -1,7 +1,7 @@
-name: klayvio_sdk
+name: klaviyo_sdk
 description: A Flutter plugin for Klaviyo SDK
 version: 0.0.1
-homepage: https://github.com/yourusername/klayvio_sdk
+homepage: https://github.com/yourusername/klaviyo_sdk
 
 environment:
   sdk: ">=2.19.0 <4.0.0"
@@ -35,10 +35,10 @@ flutter:
   plugin:
     platforms:
       android:
-        package: com.example.klayvio_sdk
-        pluginClass: KlayvioSdkPlugin
+        package: com.bananapie.klaviyo_sdk
+        pluginClass: KlaviyoSdkPlugin
       ios:
-        pluginClass: KlayvioSdkPlugin
+        pluginClass: KlaviyoSdkPlugin
 
   # To add assets to your plugin package, add an assets section, like this:
   # assets:

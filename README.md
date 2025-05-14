@@ -18,7 +18,7 @@ A Flutter plugin for integrating Klaviyo's push notifications, event tracking, a
 
 2. Update your Podfile to include the necessary Klaviyo dependencies:
 
-# klayvio_sdk
+# klaviyo_sdk
 
 A new Flutter plugin project.
 

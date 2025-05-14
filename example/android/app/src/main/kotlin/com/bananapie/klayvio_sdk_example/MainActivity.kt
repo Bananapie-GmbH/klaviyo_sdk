@@ -1,4 +1,4 @@
-package com.bananapie.klayvio_sdk_example
+package com.bananapie.klaviyo_sdk_example
 
 import io.flutter.embedding.android.FlutterActivity
 

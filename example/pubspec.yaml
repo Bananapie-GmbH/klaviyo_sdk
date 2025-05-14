@@ -1,8 +1,8 @@
-name: klayvio_sdk_example
-description: "Demonstrates how to use the klayvio_sdk plugin."
+name: klaviyo_sdk_example
+description: "Demonstrates how to use the klaviyo_sdk plugin."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
-publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+publish_to: "none" # Remove this line if you wish to publish to pub.dev
 
 environment:
   sdk: ^3.6.0
@@ -17,9 +17,9 @@ dependencies:
   flutter:
     sdk: flutter
 
-  klayvio_sdk:
+  klaviyo_sdk:
     # When depending on this package from a real application you should use:
-    #   klayvio_sdk: ^x.y.z
+    #   klaviyo_sdk: ^x.y.z
     # See https://dart.dev/tools/pub/dependencies#version-constraints
     # The example app is bundled with the plugin so we use a path dependency on
     # the parent directory to use the current plugin's version.
@@ -47,7 +47,6 @@ dev_dependencies:
 
 # The following section is specific to Flutter packages.
 flutter:
-
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.

@@ -1,6 +1,6 @@
-# klayvio_sdk_example
+# klaviyo_sdk_example
 
-Demonstrates how to use the klayvio_sdk plugin.
+Demonstrates how to use the klaviyo_sdk plugin.
 
 ## Getting Started
 

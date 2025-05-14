@@ -98,7 +98,7 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
-  klayvio_sdk:
+  klaviyo_sdk:
     dependency: "direct main"
     description:
       path: ".."
