@@ -1,0 +1,8 @@
+rootProject.name = 'klayvio_sdk'
+
+// settings.gradle
+dependencyResolutionManagement {
+    repositories {
+        maven { url "https://jitpack.io" }
+    }
+}
