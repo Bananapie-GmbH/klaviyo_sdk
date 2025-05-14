@@ -1,4 +1,4 @@
-package com.bananapie.klayvio_sdk
+package com.bananapie.klaviyo_sdk
 
 import androidx.annotation.NonNull
 import com.klaviyo.analytics.Klaviyo
@@ -11,8 +11,8 @@ import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
 
-/** KlayvioSdkPlugin */
-class KlayvioSdkPlugin: FlutterPlugin, MethodCallHandler {
+/** KlaviyoSdkPlugin */
+class KlaviyoSdkPlugin: FlutterPlugin, MethodCallHandler {
   /// The MethodChannel that will the communication between Flutter and native Android
   ///
   /// This local reference serves to register the plugin with the Flutter Engine and unregister it
@@ -22,7 +22,7 @@ class KlayvioSdkPlugin: FlutterPlugin, MethodCallHandler {
   private lateinit var flutterPluginBinding: FlutterPlugin.FlutterPluginBinding
 
   override fun onAttachedToEngine(@NonNull binding: FlutterPlugin.FlutterPluginBinding) {
-    channel = MethodChannel(binding.binaryMessenger, "klayvio_sdk")
+    channel = MethodChannel(binding.binaryMessenger, "klaviyo_sdk")
     channel.setMethodCallHandler(this)
     
     // Initialize Klaviyo instance
