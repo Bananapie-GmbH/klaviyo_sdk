@@ -3,13 +3,17 @@ package com.bananapie.klaviyo_sdk
 import androidx.annotation.NonNull
 import com.klaviyo.analytics.Klaviyo
 import com.klaviyo.analytics.model.Event
+import com.klaviyo.analytics.model.EventKey
+import com.klaviyo.analytics.model.EventMetric
 import com.klaviyo.analytics.model.Profile
+import com.klaviyo.analytics.model.ProfileKey
 
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
+import java.io.Serializable
 
 /** KlaviyoSdkPlugin */
 class KlaviyoSdkPlugin: FlutterPlugin, MethodCallHandler {
@@ -18,15 +22,11 @@ class KlaviyoSdkPlugin: FlutterPlugin, MethodCallHandler {
   /// This local reference serves to register the plugin with the Flutter Engine and unregister it
   /// when the Flutter Engine is detached from the Activity
   private lateinit var channel : MethodChannel
-  private lateinit var klaviyo: Klaviyo
-  private lateinit var flutterPluginBinding: FlutterPlugin.FlutterPluginBinding
+  private var flutterPluginBinding: FlutterPlugin.FlutterPluginBinding? = null
 
   override fun onAttachedToEngine(@NonNull binding: FlutterPlugin.FlutterPluginBinding) {
     channel = MethodChannel(binding.binaryMessenger, "klaviyo_sdk")
     channel.setMethodCallHandler(this)
-    
-    // Initialize Klaviyo instance
-    klaviyo = Klaviyo.getInstance()
     flutterPluginBinding = binding
   }
 
@@ -40,60 +40,70 @@ class KlaviyoSdkPlugin: FlutterPlugin, MethodCallHandler {
           val apiKey = call.argument<String>("apiKey")
           if (apiKey != null) {
             // Initialize Klaviyo with the API key and application context
-            klaviyo.initialize(apiKey, flutterPluginBinding.applicationContext)
+            Klaviyo.initialize(apiKey, flutterPluginBinding!!.applicationContext)
             result.success(true)
           } else {
             result.error("INVALID_ARGUMENTS", "API key is required", null)
           }
         }
         "setProfile" -> {
-          val email = call.argument<String>("email")
-          val phoneNumber = call.argument<String>("phoneNumber")
-          val externalId = call.argument<String>("externalId")
-          val firstName = call.argument<String>("firstName")
-          val lastName = call.argument<String>("lastName")
-          val properties = call.argument<Map<String, Any>>("properties")
+          try {
+            val profilePropertiesRaw = call.arguments<Map<String, Any>?>()
+
+            if (profilePropertiesRaw == null) {
+              result.error("Profile update error", "No properties passed", null)
+              return
+            }
+
+            val profileProperties = convertMapToSeralizedMap(profilePropertiesRaw)
+
+            val customProperties =
+                    profileProperties["properties"] as Map<String, Serializable>?
+
+            val email = profileProperties["email"] as? String
+            val externalId = profileProperties["externalId"] as? String
+            val phoneNumber = profileProperties["phoneNumber"] as? String
+            val propertyMap = mutableMapOf<ProfileKey, Serializable>()
+
+            customProperties?.forEach { (key, value) ->
+              propertyMap[ProfileKey.CUSTOM(key)] = value
+            }
+
+            val profile = Profile(
+              externalId = externalId,
+              email = email,
+              phoneNumber = phoneNumber,
+              properties = if (propertyMap.isEmpty()) null else propertyMap
+            )
           
-          // Create a profile using the Builder pattern
-          val profileBuilder = Profile.Builder()
-          
-          email?.let { profileBuilder.setEmail(it) }
-          phoneNumber?.let { profileBuilder.setPhoneNumber(it) }
-          externalId?.let { profileBuilder.setExternalId(it) }
-          firstName?.let { profileBuilder.setFirstName(it) }
-          lastName?.let { profileBuilder.setLastName(it) }
-          
-          properties?.forEach { (key, value) ->
-            profileBuilder.addProperty(key, value)
+            Klaviyo.setProfile(profile)
+
+            result.success("Profile updated")
+          } catch (e: Exception) {
+            result.error("Profile update error", e.message, e)
           }
-          
-          // Set the profile
-          klaviyo.setProfile(profileBuilder.build())
-          result.success(true)
         }
         "resetProfile" -> {
           // Reset the current profile
-          klaviyo.resetProfile()
+          Klaviyo.resetProfile()
           result.success(true)
         }
         "createEvent" -> {
-          val name = call.argument<String>("name")
-          val properties = call.argument<Map<String, Any>>("properties") ?: mapOf()
-          val value = call.argument<Double>("value")
+          val eventName = call.argument<String>("name")
+          val metaDataRaw = call.argument<Map<String, Any>?>("properties")
           
-          if (name != null) {
-            // Create an event using the Builder pattern
-            val eventBuilder = Event.Builder(name)
-            
-            properties.forEach { (key, value) ->
-              eventBuilder.addProperty(key, value)
+          if (eventName != null && metaDataRaw != null) {
+            val event = Event(EventMetric.CUSTOM(eventName))
+
+            val metaData = convertMapToSeralizedMap(metaDataRaw)
+
+            for (item in metaData) {
+                event.setProperty(EventKey.CUSTOM(item.key), value = item.value)
             }
-            
-            value?.let { eventBuilder.setValue(it) }
-            
-            // Create the event
-            klaviyo.createEvent(eventBuilder.build())
-            result.success(true)
+            Klaviyo.createEvent(event)
+
+            result.success("Event[$eventName] created with metadataMap: $metaData")
+          
           } else {
             result.error("INVALID_ARGUMENTS", "Event name is required", null)
           }
@@ -107,7 +117,7 @@ class KlaviyoSdkPlugin: FlutterPlugin, MethodCallHandler {
           val token = call.argument<String>("token")
           if (token != null) {
             // Set the push token
-            klaviyo.setPushToken(token)
+            Klaviyo.setPushToken(token)
             result.success(true)
           } else {
             result.error("INVALID_ARGUMENTS", "Push token is required", null)
@@ -127,6 +137,23 @@ class KlaviyoSdkPlugin: FlutterPlugin, MethodCallHandler {
   }
 
   override fun onDetachedFromEngine(@NonNull binding: FlutterPlugin.FlutterPluginBinding) {
+    flutterPluginBinding = null
     channel.setMethodCallHandler(null)
+  }
+
+  private fun convertMapToSeralizedMap(map: Map<String, Any>): Map<String, Serializable> {
+    val convertedMap = mutableMapOf<String, Serializable>()
+
+    for ((key, value) in map) {
+        if (value is Serializable) {
+            convertedMap[key] = value
+        } else {
+            // Handle non-serializable values here if needed
+            // For example, you could skip them or throw an exception
+            // depending on your requirements.
+        }
+    }
+
+    return convertedMap
   }
 }
