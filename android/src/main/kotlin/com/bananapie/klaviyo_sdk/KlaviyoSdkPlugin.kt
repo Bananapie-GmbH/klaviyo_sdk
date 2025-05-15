@@ -1,7 +1,9 @@
 package com.bananapie.klaviyo_sdk
 
+import android.content.Intent
 import androidx.annotation.NonNull
 import com.klaviyo.analytics.Klaviyo
+import com.klaviyo.analytics.Klaviyo.isKlaviyoIntent
 import com.klaviyo.analytics.model.Event
 import com.klaviyo.analytics.model.EventKey
 import com.klaviyo.analytics.model.EventMetric
@@ -122,6 +124,31 @@ class KlaviyoSdkPlugin: FlutterPlugin, MethodCallHandler {
           } else {
             result.error("INVALID_ARGUMENTS", "Push token is required", null)
           }
+        }
+        "handlePush" -> {
+
+          val data = call.argument<Map<String, Any>?>("data")
+          val intentData = convertMapToSeralizedMap(data)
+
+
+          if(data == null) {
+            result.success(true)
+            return
+          }
+
+          if(intentData.containsKey("com.klaviyo._k")) {
+            try {
+              val intent = Intent()
+                .putExtra("com.klaviyo._k","")
+
+              Klaviyo.handlePush(intent)
+              result.success(true)
+            } catch (e: Exception) {
+              result.error("Push handle error", e.message, e)
+            }
+          }
+
+          result.success(true)
         }
         else -> {
           result.notImplemented()

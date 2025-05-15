@@ -176,4 +176,21 @@ class KlaviyoSdk {
       return false;
     }
   }
+
+  Future<void> handlePush(Map<String, dynamic>? data) async {
+    try {
+      if (!_initialized) {
+        debugPrint(
+            "Klaviyo SDK: Warning! KlaviyoSdk not initialized before handlePush call");
+      }
+
+      final success = await KlaviyoSdkPlatform.instance.handlePush(data);
+
+      if (success) {
+        debugPrint("Klaviyo SDK: Push notification handled successfully");
+      }
+    } catch (e) {
+      debugPrint("Klaviyo SDK: Error handling push notification: $e");
+    }
+  }
 }
