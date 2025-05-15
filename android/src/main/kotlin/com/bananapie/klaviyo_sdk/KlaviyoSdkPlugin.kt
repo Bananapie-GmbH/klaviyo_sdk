@@ -129,27 +129,23 @@ class KlaviyoSdkPlugin: FlutterPlugin, MethodCallHandler {
 
           val data = call.argument<Map<String, Any>?>("data")
 
+          if(data != null) {
+            val intentData = convertMapToSeralizedMap(data)
 
-          if(data == null) {
-            result.success(true)
-            return
-          }
+            if(intentData.containsKey("com.klaviyo._k")) {
+              try {
+                val intent = Intent()
+                  .putExtra("com.klaviyo._k","")
 
-          val intentData = convertMapToSeralizedMap(data!!)
-
-          if(intentData.containsKey("com.klaviyo._k")) {
-            try {
-              val intent = Intent()
-                .putExtra("com.klaviyo._k","")
-
-              Klaviyo.handlePush(intent)
-              result.success(true)
-            } catch (e: Exception) {
-              result.error("Push handle error", e.message, e)
+                Klaviyo.handlePush(intent)
+                result.success(true)
+              } catch (e: Exception) {
+                result.error("Push handle error", e.message, e)
+              }
             }
-          }
 
-          result.success(true)
+            result.success(true)
+          }
         }
         else -> {
           result.notImplemented()
