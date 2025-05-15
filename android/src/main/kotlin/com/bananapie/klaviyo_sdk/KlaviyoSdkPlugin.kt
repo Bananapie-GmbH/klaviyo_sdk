@@ -128,13 +128,14 @@ class KlaviyoSdkPlugin: FlutterPlugin, MethodCallHandler {
         "handlePush" -> {
 
           val data = call.argument<Map<String, Any>?>("data")
-          val intentData = convertMapToSeralizedMap(data)
 
 
           if(data == null) {
             result.success(true)
             return
           }
+
+          val intentData = convertMapToSeralizedMap(data!!)
 
           if(intentData.containsKey("com.klaviyo._k")) {
             try {
