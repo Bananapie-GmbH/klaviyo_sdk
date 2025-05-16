@@ -118,10 +118,11 @@ class MethodChannelKlaviyoSdk extends KlaviyoSdkPlatform {
   }
 
   @override
-  Future<bool> handlePush(Map<String, dynamic>? data) async {
+  Future<bool> handlePush(Map<String, dynamic>? payload) async {
     try {
       final success =
-          await methodChannel.invokeMethod<bool>('handlePush', {'data': data});
+          await methodChannel
+          .invokeMethod<bool>('handlePush', {'payload': payload});
       return success ?? false;
     } on PlatformException catch (e) {
       debugPrint('Error handling push: ${e.message}');

@@ -2,25 +2,38 @@ import Flutter
 import UIKit
 import KlaviyoSwift
 
-public class KlaviyoSdkPlugin: NSObject, FlutterPlugin {
+public class KlaviyoSdkPlugin: NSObject, FlutterPlugin, UNUserNotificationCenterDelegate {
   public static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(name: "klaviyo_sdk", binaryMessenger: registrar.messenger())
     let instance = KlaviyoSdkPlugin()
     registrar.addMethodCallDelegate(instance, channel: channel)
     
-    // Register for application lifecycle notifications to handle push token
-    NotificationCenter.default.addObserver(
-      instance,
-      selector: #selector(instance.applicationDidBecomeActive),
-      name: UIApplication.didBecomeActiveNotification,
-      object: nil
-    )
+    
   }
-  
-  @objc func applicationDidBecomeActive() {
-    // This is a good place to check if push notifications are enabled
-    // and prompt the user if they're not
-  }
+
+  func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void) {
+        // If this notification is Klaviyo's notification we'll handle it
+        // else pass it on to the next push notification service to which it may belong
+        let handled = KlaviyoSDK().handle(notificationResponse: response, withCompletionHandler: completionHandler)
+        if !handled {
+            completionHandler()
+        }
+    }
+
+    // below method is called when the app receives push notifications when the app is the foreground
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        if #available(iOS 14.0, *) {
+            completionHandler([.list, .banner])
+        } else {
+            completionHandler([.alert])
+        }
+    }
 
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     switch call.method {
@@ -136,6 +149,38 @@ public class KlaviyoSdkPlugin: NSObject, FlutterPlugin {
         }
       } else {
         result(FlutterError(code: "INVALID_TOKEN", message: "Could not parse token string", details: nil))
+      }
+    case "handlePush":
+      guard let args = call.arguments as? [String: Any],
+            let payload = args["payload"] as? [String: Any] else {
+        result(true)
+        return
+      }
+
+      // Log the received payload for debugging
+      print("Received push payload: \(payload)")
+      
+      // Check if the payload contains a "data" key
+      if let data = payload["data"] as? [String: Any] {
+        print("Found data in payload: \(data)")
+        // If there's a data key, we'll use its contents instead of the top-level payload
+        // This is to handle FCM format where the Klaviyo data might be nested in a data field
+        if data.keys.contains("_k") {
+          // Process the data payload instead of the top-level payload
+          do {
+            try KlaviyoSDK().handle(pushNotification: data)
+            result(true)
+            return
+          } catch let error {
+            result(FlutterError(code: "HANDLE_PUSH_ERROR", message: "Failed to handle push notification data: \(error.localizedDescription)", details: nil))
+            return
+          }
+        }
+      }
+      
+      } else {
+        // Not a Klaviyo push notification, but still return success
+        result(true)
       }
     default:
       result(FlutterMethodNotImplemented)

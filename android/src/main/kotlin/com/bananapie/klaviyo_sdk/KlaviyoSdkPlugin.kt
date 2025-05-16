@@ -127,12 +127,19 @@ class KlaviyoSdkPlugin: FlutterPlugin, MethodCallHandler {
         }
         "handlePush" -> {
 
-          val data = call.argument<Map<String, Any>?>("data")
+          val payload = call.argument<Map<String, Any>?>("payload")
 
-          if(data != null) {
-            val intentData = convertMapToSeralizedMap(data)
+          if(payload != null) {
+            val payloadData = convertMapToSeralizedMap(payload)
+            val dataValue = payloadData["data"]
+            val intentData = if (dataValue is Map<*, *>) {
+                @Suppress("UNCHECKED_CAST")
+                convertMapToSeralizedMap(dataValue as Map<String, Any>)
+            } else {
+                mapOf()
+            }
 
-            if(intentData.containsKey("com.klaviyo._k")) {
+            if(intentData.containsKey("_k")) {
               try {
                 val intent = Intent()
                   .putExtra("com.klaviyo._k","")

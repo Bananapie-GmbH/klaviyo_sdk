@@ -70,7 +70,7 @@ abstract class KlaviyoSdkPlatform extends PlatformInterface {
   }
 
   /// Handle a push notification
-  Future<bool> handlePush(Map<String, dynamic>? data) {
+  Future<bool> handlePush(Map<String, dynamic>? payload) {
     throw UnimplementedError('handlePush() has not been implemented.');
   }
 }
