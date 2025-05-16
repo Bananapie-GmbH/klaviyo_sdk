@@ -151,37 +151,7 @@ public class KlaviyoSdkPlugin: NSObject, FlutterPlugin, UNUserNotificationCenter
         result(FlutterError(code: "INVALID_TOKEN", message: "Could not parse token string", details: nil))
       }
     case "handlePush":
-      guard let args = call.arguments as? [String: Any],
-            let payload = args["payload"] as? [String: Any] else {
-        result(true)
-        return
-      }
-
-      // Log the received payload for debugging
-      print("Received push payload: \(payload)")
-      
-      // Check if the payload contains a "data" key
-      if let data = payload["data"] as? [String: Any] {
-        print("Found data in payload: \(data)")
-        // If there's a data key, we'll use its contents instead of the top-level payload
-        // This is to handle FCM format where the Klaviyo data might be nested in a data field
-        if data.keys.contains("_k") {
-          // Process the data payload instead of the top-level payload
-          do {
-            try KlaviyoSDK().handle(pushNotification: data)
-            result(true)
-            return
-          } catch let error {
-            result(FlutterError(code: "HANDLE_PUSH_ERROR", message: "Failed to handle push notification data: \(error.localizedDescription)", details: nil))
-            return
-          }
-        }
-      }
-      
-      } else {
-        // Not a Klaviyo push notification, but still return success
-        result(true)
-      }
+      result(true)
     default:
       result(FlutterMethodNotImplemented)
     }
