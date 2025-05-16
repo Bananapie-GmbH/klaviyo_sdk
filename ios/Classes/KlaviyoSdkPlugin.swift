@@ -11,7 +11,7 @@ public class KlaviyoSdkPlugin: NSObject, FlutterPlugin, UNUserNotificationCenter
     
   }
 
-  func userNotificationCenter(
+  public func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void) {
@@ -24,7 +24,7 @@ public class KlaviyoSdkPlugin: NSObject, FlutterPlugin, UNUserNotificationCenter
     }
 
     // below method is called when the app receives push notifications when the app is the foreground
-    func userNotificationCenter(
+    public func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
