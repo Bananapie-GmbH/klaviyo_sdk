@@ -55,4 +55,5 @@ dependencies {
     implementation "com.github.klaviyo.klaviyo-android-sdk:analytics:3.3.1"
     implementation "com.github.klaviyo.klaviyo-android-sdk:push-fcm:3.3.1"
     implementation "com.github.klaviyo.klaviyo-android-sdk:forms:3.3.1"
+    implementation 'com.google.firebase:firebase-messaging-ktx:24.1.1'
 }

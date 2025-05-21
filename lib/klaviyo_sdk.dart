@@ -20,6 +20,7 @@ class KlaviyoSdk {
   Future<bool> initialize(String apiKey) async {
     try {
       final success = await KlaviyoSdkPlatform.instance.initialize(apiKey);
+
       if (success) {
         _initialized = true;
         debugPrint("Klaviyo SDK: KlaviyoSdk initialized successfully");
@@ -193,4 +194,5 @@ class KlaviyoSdk {
       debugPrint("Klaviyo SDK: Error handling push notification: $e");
     }
   }
+
 }

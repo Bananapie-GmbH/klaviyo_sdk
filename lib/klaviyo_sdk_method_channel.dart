@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
@@ -24,6 +26,7 @@ class MethodChannelKlaviyoSdk extends KlaviyoSdkPlatform {
   @override
   Future<bool> initialize(String apiKey) async {
     try {
+
       final success = await methodChannel
           .invokeMethod<bool>('initialize', {'apiKey': apiKey});
       return success ?? false;

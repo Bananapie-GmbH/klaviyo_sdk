@@ -6,6 +6,12 @@ public class KlaviyoSdkPlugin: NSObject, FlutterPlugin, UNUserNotificationCenter
   public static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(name: "klaviyo_sdk", binaryMessenger: registrar.messenger())
     let instance = KlaviyoSdkPlugin()
+
+    if #available(OSX 10.14, *) {
+        let center = UNUserNotificationCenter.current()
+        center.delegate = instance
+    }
+
     registrar.addMethodCallDelegate(instance, channel: channel)
     
     
@@ -15,6 +21,12 @@ public class KlaviyoSdkPlugin: NSObject, FlutterPlugin, UNUserNotificationCenter
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void) {
+
+        if #available(iOS 16.0, *) {
+          UNUserNotificationCenter.current().setBadgeCount(UIApplication.shared.applicationIconBadgeNumber - 1)
+        } else {
+          UIApplication.shared.applicationIconBadgeNumber -= 1
+        }
         // If this notification is Klaviyo's notification we'll handle it
         // else pass it on to the next push notification service to which it may belong
         let handled = KlaviyoSDK().handle(notificationResponse: response, withCompletionHandler: completionHandler)
@@ -28,6 +40,7 @@ public class KlaviyoSdkPlugin: NSObject, FlutterPlugin, UNUserNotificationCenter
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        
         if #available(iOS 14.0, *) {
             completionHandler([.list, .banner])
         } else {

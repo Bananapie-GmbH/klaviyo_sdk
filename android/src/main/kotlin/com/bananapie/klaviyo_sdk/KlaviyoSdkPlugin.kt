@@ -1,5 +1,6 @@
 package com.bananapie.klaviyo_sdk
 
+import android.content.Context
 import android.content.Intent
 import androidx.annotation.NonNull
 import com.klaviyo.analytics.Klaviyo
@@ -16,6 +17,11 @@ import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
 import java.io.Serializable
+import com.google.firebase.messaging.RemoteMessage
+import com.klaviyo.pushFcm.KlaviyoRemoteMessage.isKlaviyoMessage
+
+private const val CHANNEL_NAME = "klaviyo_sdk"
+
 
 /** KlaviyoSdkPlugin */
 class KlaviyoSdkPlugin: FlutterPlugin, MethodCallHandler {
@@ -24,12 +30,15 @@ class KlaviyoSdkPlugin: FlutterPlugin, MethodCallHandler {
   /// This local reference serves to register the plugin with the Flutter Engine and unregister it
   /// when the Flutter Engine is detached from the Activity
   private lateinit var channel : MethodChannel
+  private lateinit var context: Context
   private var flutterPluginBinding: FlutterPlugin.FlutterPluginBinding? = null
+  
 
   override fun onAttachedToEngine(@NonNull binding: FlutterPlugin.FlutterPluginBinding) {
-    channel = MethodChannel(binding.binaryMessenger, "klaviyo_sdk")
+    channel = MethodChannel(binding.binaryMessenger, CHANNEL_NAME)
     channel.setMethodCallHandler(this)
     flutterPluginBinding = binding
+    context = binding.applicationContext
   }
 
   override fun onMethodCall(@NonNull call: MethodCall, @NonNull result: Result) {
@@ -42,7 +51,7 @@ class KlaviyoSdkPlugin: FlutterPlugin, MethodCallHandler {
           val apiKey = call.argument<String>("apiKey")
           if (apiKey != null) {
             // Initialize Klaviyo with the API key and application context
-            Klaviyo.initialize(apiKey, flutterPluginBinding!!.applicationContext)
+            Klaviyo.initialize(apiKey, context)
             result.success(true)
           } else {
             result.error("INVALID_ARGUMENTS", "API key is required", null)
@@ -187,4 +196,5 @@ class KlaviyoSdkPlugin: FlutterPlugin, MethodCallHandler {
 
     return convertedMap
   }
+
 }
