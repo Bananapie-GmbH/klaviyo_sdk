@@ -3,6 +3,9 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+// TODO stream data back to flutter
+// Dont forget to update MainActivity.kt in the target app with the example code from the example app
+
 /// Class representing push token data
 class KlaviyoPushToken {
   final String token;
