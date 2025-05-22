@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'klaviyo_sdk_platform_interface.dart';
 
 class KlaviyoSdk {
@@ -20,6 +21,7 @@ class KlaviyoSdk {
   Future<bool> initialize(String apiKey) async {
     try {
       final success = await KlaviyoSdkPlatform.instance.initialize(apiKey);
+      KlaviyoSdkPlatform.instance.setupNativeMethodCalls(_handleMethodCall);
 
       if (success) {
         _initialized = true;
@@ -195,4 +197,14 @@ class KlaviyoSdk {
     }
   }
 
+  // Handle method calls from the native layer
+  Future<void> _handleMethodCall(MethodCall call) async {
+    if (call.method == 'onDeepLinkReceived') {
+      final deepLink = call.arguments['deepLink'];
+      debugPrint("Klaviyo SDK: Deep link received: $deepLink");
+    } else if (call.method == 'onPushTokenReceived') {
+      final token = call.arguments['token'];
+      debugPrint("Klaviyo SDK: Push token received: $token");
+    }
+  }
 }

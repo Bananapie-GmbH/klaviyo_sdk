@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 
 import 'klaviyo_sdk_method_channel.dart';
@@ -30,6 +31,13 @@ abstract class KlaviyoSdkPlatform extends PlatformInterface {
   /// Initialize the Klaviyo SDK with your public API key
   Future<bool> initialize(String apiKey) {
     throw UnimplementedError('initialize() has not been implemented.');
+  }
+
+  /// Handle a deep link
+  Future<bool> setupNativeMethodCalls(
+      Future<dynamic> Function(MethodCall)? handler) {
+    throw UnimplementedError(
+        'setupNativeMethodCalls() has not been implemented.');
   }
 
   /// Set a profile for identification

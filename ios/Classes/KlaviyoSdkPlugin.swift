@@ -2,26 +2,32 @@ import Flutter
 import UIKit
 import KlaviyoSwift
 
-public class KlaviyoSdkPlugin: NSObject, FlutterPlugin, UNUserNotificationCenterDelegate {
+public class KlaviyoSdkPlugin: NSObject, FlutterPlugin, UNUserNotificationCenterDelegate, UIApplicationDelegate {
+  // Static channel for access from static methods
+  private static var methodChannel: FlutterMethodChannel?
+  
+  // Instance channel for access from instance methods
+  private var channel: FlutterMethodChannel?
+
   public static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(name: "klaviyo_sdk", binaryMessenger: registrar.messenger())
     let instance = KlaviyoSdkPlugin()
-
-    if #available(OSX 10.14, *) {
-        let center = UNUserNotificationCenter.current()
-        center.delegate = instance
-    }
-
+    instance.channel = channel  // Set the instance channel
+    
     registrar.addMethodCallDelegate(instance, channel: channel)
     
+    // Store in static property for static method access
+    methodChannel = channel
     
+    // Register for application delegate callbacks
+    registrar.addApplicationDelegate(instance)
   }
-
+  
   public func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void) {
-
+        
         if #available(iOS 16.0, *) {
           UNUserNotificationCenter.current().setBadgeCount(UIApplication.shared.applicationIconBadgeNumber - 1)
         } else {
@@ -29,7 +35,10 @@ public class KlaviyoSdkPlugin: NSObject, FlutterPlugin, UNUserNotificationCenter
         }
         // If this notification is Klaviyo's notification we'll handle it
         // else pass it on to the next push notification service to which it may belong
-        let handled = KlaviyoSDK().handle(notificationResponse: response, withCompletionHandler: completionHandler)
+        let handled = KlaviyoSDK().handle(notificationResponse: response, withCompletionHandler: completionHandler) { url in
+          // Use instance variable and correct arguments syntax
+          self.channel?.invokeMethod("onDeepLinkReceived", arguments: ["deepLink": url.absoluteString])
+        }
         if !handled {
             completionHandler()
         }
@@ -151,7 +160,7 @@ public class KlaviyoSdkPlugin: NSObject, FlutterPlugin, UNUserNotificationCenter
         result(FlutterError(code: "INVALID_ARGUMENTS", message: "Push token is required", details: nil))
         return
       }
-      
+
       // Convert the hex string to Data
       if let tokenData = Data(hexString: tokenString) {
         do {
@@ -169,6 +178,7 @@ public class KlaviyoSdkPlugin: NSObject, FlutterPlugin, UNUserNotificationCenter
       result(FlutterMethodNotImplemented)
     }
   }
+
 }
 
 // Extension to convert hex string to Data

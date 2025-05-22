@@ -132,5 +132,11 @@ class MethodChannelKlaviyoSdk extends KlaviyoSdkPlatform {
       rethrow;
     }
   }
-  
+
+  @override
+  Future<bool> setupNativeMethodCalls(
+      Future<dynamic> Function(MethodCall)? handler) async {
+    methodChannel.setMethodCallHandler(handler);
+    return true;
+  }
 }
