@@ -3,20 +3,23 @@ import UIKit
 import KlaviyoSwift
 import UserNotifications
 
-public class KlaviyoFlutterPlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
-    private var eventSink: FlutterEventSink?
-    private var initialPushNotification: [String: Any]?
+public class KlaviyoFlutterPlugin: NSObject, FlutterPlugin {
+    private var tokenEventSink: FlutterEventSink?
+    private var notificationEventSink: FlutterEventSink?
+    private var initialNotification: [String: Any]?
     private var channel: FlutterMethodChannel?
     
     public static func register(with registrar: FlutterPluginRegistrar) {
-        let channel = FlutterMethodChannel(name: "klaviyo_sdk", binaryMessenger: registrar.messenger())
-        let eventChannel = FlutterEventChannel(name: "klaviyo_sdk/push_events", binaryMessenger: registrar.messenger())
+        let channel = FlutterMethodChannel(name: "klaviyo_flutter", binaryMessenger: registrar.messenger())
+        let tokenEventChannel = FlutterEventChannel(name: "klaviyo_flutter/token_events", binaryMessenger: registrar.messenger())
+        let notificationEventChannel = FlutterEventChannel(name: "klaviyo_flutter/notification_events", binaryMessenger: registrar.messenger())
         
         let instance = KlaviyoFlutterPlugin()
         instance.channel = channel
         
         registrar.addMethodCallDelegate(instance, channel: channel)
-        eventChannel.setStreamHandler(instance)
+        tokenEventChannel.setStreamHandler(TokenStreamHandler(plugin: instance))
+        notificationEventChannel.setStreamHandler(NotificationStreamHandler(plugin: instance))
         
         // Handle app launch from terminated state
         instance.handleAppLaunchFromPush()
@@ -25,9 +28,8 @@ public class KlaviyoFlutterPlugin: NSObject, FlutterPlugin, FlutterStreamHandler
     private func handleAppLaunchFromPush() {
         if let launchOptions = (UIApplication.shared.delegate as? FlutterAppDelegate)?.launchOptions,
            let userInfo = launchOptions[UIApplication.LaunchOptionsKey.remoteNotification] as? [AnyHashable: Any] {
-            self.initialPushNotification = self.formatPushNotificationData(
+            self.initialNotification = self.formatNotificationData(
                 userInfo: userInfo,
-                interactionType: "opened",
                 fromBackground: false,
                 fromTerminated: true
             )
@@ -38,20 +40,12 @@ public class KlaviyoFlutterPlugin: NSObject, FlutterPlugin, FlutterStreamHandler
         switch call.method {
         case "initialize":
             handleInitialize(call, result: result)
-        case "setProfile":
-            handleSetProfile(call, result: result)
-        case "trackEvent":
-            handleTrackEvent(call, result: result)
         case "requestPushPermissions":
             handleRequestPushPermissions(result: result)
-        case "registerForPushNotifications":
-            handleRegisterForPushNotifications(result: result)
-        case "getPushToken":
-            handleGetPushToken(result: result)
-        case "getInitialPushNotification":
-            handleGetInitialPushNotification(result: result)
-        case "resetProfile":
-            handleResetProfile(result: result)
+        case "getInitialNotification":
+            handleGetInitialNotification(result: result)
+        case "setProfile":
+            handleSetProfile(call, result: result)
         default:
             result(FlutterMethodNotImplemented)
         }
@@ -69,96 +63,40 @@ public class KlaviyoFlutterPlugin: NSObject, FlutterPlugin, FlutterStreamHandler
         result(nil)
     }
     
-    private func handleSetProfile(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
-        guard let args = call.arguments as? [String: Any] else {
-            result(FlutterError(code: "INVALID_ARGUMENTS", message: "Arguments are required", details: nil))
-            return
-        }
-        
-        let profile = Profile()
-        
-        if let email = args["email"] as? String {
-            profile.email = email
-        }
-        
-        if let phoneNumber = args["phoneNumber"] as? String {
-            profile.phoneNumber = phoneNumber
-        }
-        
-        if let externalId = args["externalId"] as? String {
-            profile.externalId = externalId
-        }
-        
-        if let properties = args["properties"] as? [String: Any] {
-            for (key, value) in properties {
-                profile.setProfileAttribute(propertyKey: ProfilePropertyKey(rawValue: key), value: value)
-            }
-        }
-        
-        KlaviyoSDK().set(profile: profile)
-        result(nil)
-    }
-    
-    private func handleTrackEvent(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
-        guard let args = call.arguments as? [String: Any],
-              let eventName = args["eventName"] as? String else {
-            result(FlutterError(code: "INVALID_ARGUMENTS", message: "Event name is required", details: nil))
-            return
-        }
-        
-        let properties = args["properties"] as? [String: Any]
-        let value = args["value"] as? Double
-        
-        // Create a custom event
-        let event = Event(
-          name: .customEvent(eventName),
-          properties: properties,
-          value: value
-        )
-        
-        // Create the event
-        do {
-          try KlaviyoSDK().create(event: event)
-          result(true)
-        } catch let error {
-          result(FlutterError(code: "CREATE_EVENT_ERROR", message: "Failed to create event: \(error.localizedDescription)", details: nil))
-      }
-    }
-    
     private func handleRequestPushPermissions(result: @escaping FlutterResult) {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
             DispatchQueue.main.async {
                 if let error = error {
                     result(FlutterError(code: "PERMISSION_ERROR", message: error.localizedDescription, details: nil))
                 } else {
+                    if granted {
+                        UIApplication.shared.registerForRemoteNotifications()
+                    }
                     result(granted)
                 }
             }
         }
     }
     
-    private func handleRegisterForPushNotifications(result: @escaping FlutterResult) {
-        DispatchQueue.main.async {
-            UIApplication.shared.registerForRemoteNotifications()
-            result(nil)
-        }
+    private func handleGetInitialNotification(result: @escaping FlutterResult) {
+        result(initialNotification)
+        initialNotification = nil // Clear after first access
+    }
+
+    private func handleSetProfile(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard let args = call.arguments as? [String: Any],
+              let email = args["email"] as? String,
+              let phoneNumber = args["phoneNumber"] as? String,
+              let externalId = args["externalId"] as? String,
+              let properties = args["properties"] as? [String: Any] else {
+            result(FlutterError(code: "INVALID_ARGUMENTS", message: "Invalid profile arguments", details: nil))
+            return
+        } 
+
+        
+        
     }
     
-    private func handleGetPushToken(result: @escaping FlutterResult) {
-        // The token will be available through the AppDelegate methods
-        // This is a placeholder - you might want to store the token when received
-        result(nil)
-    }
-    
-    private func handleGetInitialPushNotification(result: @escaping FlutterResult) {
-        result(initialPushNotification)
-        initialPushNotification = nil // Clear after first access
-    }
-    
-    private func handleResetProfile(result: @escaping FlutterResult) {
-        KlaviyoSDK().resetProfile()
-        result(nil)
-    }
     
     private func setupPushNotificationHandling() {
         UNUserNotificationCenter.current().delegate = self
@@ -174,26 +112,35 @@ public class KlaviyoFlutterPlugin: NSObject, FlutterPlugin, FlutterStreamHandler
     
     @objc private func didRegisterForRemoteNotifications(_ notification: Notification) {
         if let token = notification.object as? Data {
+            // Send token to Klaviyo
             KlaviyoSDK().set(pushToken: token)
+            
+            // Convert token to string and send to Flutter
+            let tokenString = token.map { String(format: "%02.2hhx", $0) }.joined()
+            let tokenData: [String: Any] = [
+                "token": tokenString,
+                "receivedAt": Int64(Date().timeIntervalSince1970 * 1000)
+            ]
+            
+            tokenEventSink?(tokenData)
         }
     }
     
-    private func formatPushNotificationData(
+    private func formatNotificationData(
         userInfo: [AnyHashable: Any],
-        interactionType: String,
-        actionId: String? = nil,
         fromBackground: Bool = false,
         fromTerminated: Bool = false
     ) -> [String: Any] {
-        var data: [String: Any] = [:]
+        var title: String?
+        var body: String?
         
         // Extract standard notification data
         if let aps = userInfo["aps"] as? [String: Any] {
             if let alert = aps["alert"] as? [String: Any] {
-                data["title"] = alert["title"]
-                data["body"] = alert["body"]
+                title = alert["title"] as? String
+                body = alert["body"] as? String
             } else if let alertString = aps["alert"] as? String {
-                data["body"] = alertString
+                body = alertString
             }
         }
         
@@ -207,24 +154,58 @@ public class KlaviyoFlutterPlugin: NSObject, FlutterPlugin, FlutterStreamHandler
         
         return [
             "data": customData,
-            "title": data["title"] as Any,
-            "body": data["body"] as Any,
-            "interactionType": interactionType,
-            "actionId": actionId as Any,
+            "title": title as Any,
+            "body": body as Any,
             "fromBackground": fromBackground,
             "fromTerminated": fromTerminated
         ]
     }
     
-    // MARK: - FlutterStreamHandler
+    // MARK: - Stream Handler Access
     
-    public func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
-        self.eventSink = events
+    func setTokenEventSink(_ eventSink: FlutterEventSink?) {
+        self.tokenEventSink = eventSink
+    }
+    
+    func setNotificationEventSink(_ eventSink: FlutterEventSink?) {
+        self.notificationEventSink = eventSink
+    }
+}
+
+// MARK: - Stream Handlers
+
+class TokenStreamHandler: NSObject, FlutterStreamHandler {
+    private weak var plugin: KlaviyoFlutterPlugin?
+    
+    init(plugin: KlaviyoFlutterPlugin) {
+        self.plugin = plugin
+    }
+    
+    func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
+        plugin?.setTokenEventSink(events)
         return nil
     }
     
-    public func onCancel(withArguments arguments: Any?) -> FlutterError? {
-        self.eventSink = nil
+    func onCancel(withArguments arguments: Any?) -> FlutterError? {
+        plugin?.setTokenEventSink(nil)
+        return nil
+    }
+}
+
+class NotificationStreamHandler: NSObject, FlutterStreamHandler {
+    private weak var plugin: KlaviyoFlutterPlugin?
+    
+    init(plugin: KlaviyoFlutterPlugin) {
+        self.plugin = plugin
+    }
+    
+    func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
+        plugin?.setNotificationEventSink(events)
+        return nil
+    }
+    
+    func onCancel(withArguments arguments: Any?) -> FlutterError? {
+        plugin?.setNotificationEventSink(nil)
         return nil
     }
 }
@@ -241,53 +222,36 @@ extension KlaviyoFlutterPlugin: UNUserNotificationCenterDelegate {
     ) {
         let userInfo = notification.request.content.userInfo
         
-        // Handle Klaviyo tracking
-        KlaviyoSDK().handle(notificationResponse: UNNotificationResponse(notification: notification, actionIdentifier: UNNotificationDefaultActionIdentifier))
-        
-        let notificationData = formatPushNotificationData(
+        let notificationData = formatNotificationData(
             userInfo: userInfo,
-            interactionType: "opened",
             fromBackground: false,
             fromTerminated: false
         )
         
-        eventSink?(notificationData)
+        notificationEventSink?(notificationData)
         
         // Show notification even when app is in foreground
         completionHandler([.alert, .badge, .sound])
     }
     
-    // Handle notification interaction (tap, action buttons)
+    // Handle notification interaction (tap)
     public func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         let userInfo = response.notification.request.content.userInfo
-        let actionIdentifier = response.actionIdentifier
         
         // Handle Klaviyo tracking
         KlaviyoSDK().handle(notificationResponse: response)
         
-        var interactionType = "opened"
-        var actionId: String?
-        
-        if actionIdentifier == UNNotificationDismissActionIdentifier {
-            interactionType = "dismissed"
-        } else if actionIdentifier != UNNotificationDefaultActionIdentifier {
-            interactionType = "actionClicked"
-            actionId = actionIdentifier
-        }
-        
-        let notificationData = formatPushNotificationData(
+        let notificationData = formatNotificationData(
             userInfo: userInfo,
-            interactionType: interactionType,
-            actionId: actionId,
             fromBackground: UIApplication.shared.applicationState != .active,
             fromTerminated: false
         )
         
-        eventSink?(notificationData)
+        notificationEventSink?(notificationData)
         
         completionHandler()
     }
