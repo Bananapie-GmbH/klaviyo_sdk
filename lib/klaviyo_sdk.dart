@@ -1,210 +1,189 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
+import 'dart:io';
 import 'package:flutter/services.dart';
-import 'klaviyo_sdk_platform_interface.dart';
 
-class KlaviyoSdk {
-  KlaviyoSdk._();
+/// Enum for push notification interaction types
+enum KlaviyoPushInteractionType {
+  opened,
+  dismissed,
+  actionClicked,
+}
 
-  static final KlaviyoSdk _instance = KlaviyoSdk._();
+/// Class representing push notification data
+class KlaviyoPushNotificationData {
+  final Map<String, dynamic> data;
+  final String? title;
+  final String? body;
+  final KlaviyoPushInteractionType interactionType;
+  final String? actionId;
+  final bool fromBackground;
+  final bool fromTerminated;
 
-  bool _initialized = false;
+  const KlaviyoPushNotificationData({
+    required this.data,
+    this.title,
+    this.body,
+    required this.interactionType,
+    this.actionId,
+    required this.fromBackground,
+    required this.fromTerminated,
+  });
 
-  /// get the instance of the [KlaviyoSdk].
-  static KlaviyoSdk get instance => _instance;
-
-  Future<String?> getPlatformVersion() {
-    return KlaviyoSdkPlatform.instance.getPlatformVersion();
+  factory KlaviyoPushNotificationData.fromMap(Map<String, dynamic> map) {
+    return KlaviyoPushNotificationData(
+      data: Map<String, dynamic>.from(map['data'] ?? {}),
+      title: map['title'],
+      body: map['body'],
+      interactionType: _parseInteractionType(map['interactionType']),
+      actionId: map['actionId'],
+      fromBackground: map['fromBackground'] ?? false,
+      fromTerminated: map['fromTerminated'] ?? false,
+    );
   }
 
-  /// Initialize the Klaviyo SDK with your public API key
-  Future<bool> initialize(String apiKey) async {
-    try {
-      final success = await KlaviyoSdkPlatform.instance.initialize(apiKey);
-      KlaviyoSdkPlatform.instance.setupNativeMethodCalls(_handleMethodCall);
-
-      if (success) {
-        _initialized = true;
-        debugPrint("Klaviyo SDK: KlaviyoSdk initialized successfully");
-      } else {
-        debugPrint("Klaviyo SDK: KlaviyoSdk initialization returned false");
-      }
-      return success;
-    } catch (e) {
-      debugPrint("Klaviyo SDK: Error initializing KlaviyoSdk: $e");
-      return false;
+  static KlaviyoPushInteractionType _parseInteractionType(String? type) {
+    switch (type) {
+      case 'opened':
+        return KlaviyoPushInteractionType.opened;
+      case 'dismissed':
+        return KlaviyoPushInteractionType.dismissed;
+      case 'actionClicked':
+        return KlaviyoPushInteractionType.actionClicked;
+      default:
+        return KlaviyoPushInteractionType.opened;
     }
   }
 
-  /// Set a profile for identification
-  Future<bool> setProfile({
+  Map<String, dynamic> toMap() {
+    return {
+      'data': data,
+      'title': title,
+      'body': body,
+      'interactionType': interactionType.name,
+      'actionId': actionId,
+      'fromBackground': fromBackground,
+      'fromTerminated': fromTerminated,
+    };
+  }
+}
+
+/// Main Klaviyo Flutter plugin class
+class KlaviyoSdk {
+  static const MethodChannel _channel = MethodChannel('klaviyo_sdk');
+  static const EventChannel _eventChannel =
+      EventChannel('klaviyo_sdk/push_events');
+
+  static KlaviyoSdk? _instance;
+  static KlaviyoSdk get instance => _instance ??= KlaviyoSdk._();
+
+  KlaviyoSdk._();
+
+  Stream<KlaviyoPushNotificationData>? _pushNotificationStream;
+
+  /// Initialize Klaviyo SDK with API key
+  Future<void> initialize(String apiKey) async {
+    try {
+      await _channel.invokeMethod('initialize', {'apiKey': apiKey});
+    } on PlatformException catch (e) {
+      throw Exception('Failed to initialize Klaviyo: ${e.message}');
+    }
+  }
+
+  /// Set user profile
+  Future<void> setProfile({
     String? email,
     String? phoneNumber,
     String? externalId,
-    String? firstName,
-    String? lastName,
     Map<String, dynamic>? properties,
   }) async {
     try {
-      if (!_initialized) {
-        debugPrint(
-            "Klaviyo SDK: Warning! KlaviyoSdk not initialized before setProfile call");
-      }
-
-      final success = await KlaviyoSdkPlatform.instance.setProfile(
-        email: email,
-        phoneNumber: phoneNumber,
-        externalId: externalId,
-        firstName: firstName,
-        lastName: lastName,
-        properties: properties,
-      );
-
-      if (success) {
-        debugPrint("Klaviyo SDK: Profile set successfully");
-      } else {
-        debugPrint("Klaviyo SDK: Setting profile returned false");
-      }
-
-      return success;
-    } catch (e) {
-      debugPrint("Klaviyo SDK: Error setting profile: $e");
-      return false;
+      await _channel.invokeMethod('setProfile', {
+        'email': email,
+        'phoneNumber': phoneNumber,
+        'externalId': externalId,
+        'properties': properties,
+      });
+    } on PlatformException catch (e) {
+      throw Exception('Failed to set profile: ${e.message}');
     }
   }
 
-  /// Reset the current profile
-  Future<bool> resetProfile() async {
-    try {
-      if (!_initialized) {
-        debugPrint(
-            "Klaviyo SDK: Warning! KlaviyoSdk not initialized before resetProfile call");
-      }
-
-      final success = await KlaviyoSdkPlatform.instance.resetProfile();
-
-      if (success) {
-        debugPrint("Klaviyo SDK: Profile reset successfully");
-      } else {
-        debugPrint("Klaviyo SDK: Resetting profile returned false");
-      }
-
-      return success;
-    } catch (e) {
-      debugPrint("Klaviyo SDK: Error resetting profile: $e");
-      return false;
-    }
-  }
-
-  /// Track an event
-  Future<bool> createEvent({
-    required String name,
+  /// Track event
+  Future<void> trackEvent({
+    required String eventName,
     Map<String, dynamic>? properties,
     double? value,
   }) async {
     try {
-      if (!_initialized) {
-        debugPrint(
-            "Klaviyo SDK: Warning! KlaviyoSdk not initialized before createEvent call");
-      }
+      await _channel.invokeMethod('trackEvent', {
+        'eventName': eventName,
+        'properties': properties,
+        'value': value,
+      });
+    } on PlatformException catch (e) {
+      throw Exception('Failed to track event: ${e.message}');
+    }
+  }
 
-      final success = await KlaviyoSdkPlatform.instance.createEvent(
-        name: name,
-        properties: properties,
-        value: value,
-      );
-
-      if (success) {
-        debugPrint("Klaviyo SDK: Event '$name' created successfully");
-      } else {
-        debugPrint("Klaviyo SDK: Creating event '$name' returned false");
-      }
-
-      return success;
-    } catch (e) {
-      debugPrint("Klaviyo SDK: Error creating event '$name': $e");
-      return false;
+  /// Request push notification permissions (iOS only)
+  Future<bool> requestPushPermissions() async {
+    if (!Platform.isIOS) return true;
+    
+    try {
+      final result = await _channel.invokeMethod('requestPushPermissions');
+      return result ?? false;
+    } on PlatformException catch (e) {
+      throw Exception('Failed to request push permissions: ${e.message}');
     }
   }
 
   /// Register for push notifications
-  Future<bool> registerForPushNotifications() async {
+  Future<void> registerForPushNotifications() async {
     try {
-      if (!_initialized) {
-        debugPrint(
-            "Klaviyo SDK: Warning! KlaviyoSdk not initialized before registerForPushNotifications call");
-      }
-
-      final success =
-          await KlaviyoSdkPlatform.instance.registerForPushNotifications();
-
-      if (success) {
-        debugPrint(
-            "Klaviyo SDK: Registered for push notifications successfully");
-      } else {
-        debugPrint(
-            "Klaviyo SDK: Registering for push notifications returned false");
-      }
-
-      return success;
-    } catch (e) {
-      debugPrint("Klaviyo SDK: Error registering for push notifications: $e");
-      return false;
+      await _channel.invokeMethod('registerForPushNotifications');
+    } on PlatformException catch (e) {
+      throw Exception(
+          'Failed to register for push notifications: ${e.message}');
     }
   }
 
-  /// Set the push token for the device
-  /// Set the push token for the device
-  ///
-  /// For iOS, pass the APNS token converted to a hex string.
-  /// For Android, pass the FCM token as received from Firebase.
-  Future<bool> setPushToken(String token) async {
+  /// Get the push notification token
+  Future<String?> getPushToken() async {
     try {
-      if (!_initialized) {
-        debugPrint(
-            "Klaviyo SDK: Warning! KlaviyoSdk not initialized before setPushToken call");
-      }
-
-      final success = await KlaviyoSdkPlatform.instance.setPushToken(token);
-
-      if (success) {
-        debugPrint("Klaviyo SDK: Push token set successfully");
-      } else {
-        debugPrint("Klaviyo SDK: Setting push token returned false");
-      }
-
-      return success;
-    } catch (e) {
-      debugPrint("Klaviyo SDK: Error setting push token: $e");
-      return false;
+      return await _channel.invokeMethod('getPushToken');
+    } on PlatformException catch (e) {
+      throw Exception('Failed to get push token: ${e.message}');
     }
   }
 
-  Future<void> handlePush(Map<String, dynamic>? data) async {
+  /// Stream of push notification interactions
+  Stream<KlaviyoPushNotificationData> get onPushNotificationReceived {
+    _pushNotificationStream ??= _eventChannel.receiveBroadcastStream().map(
+        (data) => KlaviyoPushNotificationData.fromMap(
+            Map<String, dynamic>.from(data)));
+    return _pushNotificationStream!;
+  }
+
+  /// Handle push notification when app is launched from terminated state
+  Future<KlaviyoPushNotificationData?> getInitialPushNotification() async {
     try {
-      if (!_initialized) {
-        debugPrint(
-            "Klaviyo SDK: Warning! KlaviyoSdk not initialized before handlePush call");
+      final result = await _channel.invokeMethod('getInitialPushNotification');
+      if (result != null) {
+        return KlaviyoPushNotificationData.fromMap(
+            Map<String, dynamic>.from(result));
       }
-
-      final success = await KlaviyoSdkPlatform.instance.handlePush(data);
-
-      if (success) {
-        debugPrint("Klaviyo SDK: Push notification handled successfully");
-      }
-    } catch (e) {
-      debugPrint("Klaviyo SDK: Error handling push notification: $e");
+      return null;
+    } on PlatformException catch (e) {
+      throw Exception('Failed to get initial push notification: ${e.message}');
     }
   }
 
-  // Handle method calls from the native layer
-  Future<void> _handleMethodCall(MethodCall call) async {
-    if (call.method == 'onDeepLinkReceived') {
-      final deepLink = call.arguments['deepLink'];
-      debugPrint("Klaviyo SDK: Deep link received: $deepLink");
-    } else if (call.method == 'onPushTokenReceived') {
-      final token = call.arguments['token'];
-      debugPrint("Klaviyo SDK: Push token received: $token");
+  /// Reset user profile
+  Future<void> resetProfile() async {
+    try {
+      await _channel.invokeMethod('resetProfile');
+    } on PlatformException catch (e) {
+      throw Exception('Failed to reset profile: ${e.message}');
     }
   }
 }
