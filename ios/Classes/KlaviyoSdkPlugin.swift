@@ -106,20 +106,23 @@ public class KlaviyoFlutterPlugin: NSObject, FlutterPlugin, FlutterStreamHandler
             return
         }
         
-        let event = Event(name: EventName(rawValue: eventName))
+        let properties = args["properties"] as? [String: Any]
+        let value = args["value"] as? Double
         
-        if let properties = args["properties"] as? [String: Any] {
-            for (key, value) in properties {
-                event.setEventAttribute(propertyKey: EventPropertyKey(rawValue: key), value: value)
-            }
-        }
+        // Create a custom event
+        let event = Event(
+          name: .customEvent(eventName),
+          properties: properties,
+          value: value
+        )
         
-        if let value = args["value"] as? Double {
-            event.setValue(value)
-        }
-        
-        KlaviyoSDK().create(event: event)
-        result(nil)
+        // Create the event
+        do {
+          try KlaviyoSDK().create(event: event)
+          result(true)
+        } catch let error {
+          result(FlutterError(code: "CREATE_EVENT_ERROR", message: "Failed to create event: \(error.localizedDescription)", details: nil))
+      }
     }
     
     private func handleRequestPushPermissions(result: @escaping FlutterResult) {
