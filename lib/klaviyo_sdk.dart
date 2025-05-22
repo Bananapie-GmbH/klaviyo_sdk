@@ -93,10 +93,15 @@ class KlaviyoSdk {
   /// Request push notification permissions
   Future<bool> requestPushPermissions() async {
     try {
+      debugPrint('Klaviyo SDK: Requesting push permissions');
       final result = await _channel.invokeMethod('requestPushPermissions');
+      debugPrint('Klaviyo SDK: Push permissions requested: $result'); 
       return result ?? false;
     } on PlatformException catch (e) {
-      throw Exception('Failed to request push permissions: ${e.message}');
+      debugPrint(
+          'Klaviyo SDK: Failed to request push permissions: ${e.message}');
+      throw Exception(
+          'Klaviyo SDK: Failed to request push permissions: ${e.message}');
     }
   }
 
@@ -120,14 +125,45 @@ class KlaviyoSdk {
   /// Get initial push notification if app was launched from terminated state
   Future<KlaviyoPushNotification?> getInitialNotification() async {
     try {
+      debugPrint('Klaviyo SDK: Getting initial notification');
       final result = await _channel.invokeMethod('getInitialNotification');
       if (result != null) {
+        debugPrint(
+            'Klaviyo SDK: Initial notification received: ${result.toString()}');
         return KlaviyoPushNotification.fromMap(
             Map<String, dynamic>.from(result));
       }
       return null;
     } on PlatformException catch (e) {
-      throw Exception('Failed to get initial notification: ${e.message}');
+      debugPrint(
+          'Klaviyo SDK: Failed to get initial notification: ${e.message}');
+      throw Exception(
+          'Klaviyo SDK: Failed to get initial notification: ${e.message}');
+    }
+  }
+
+  /// Set profile
+  Future<void> setProfile({
+    String? email,
+    String? phoneNumber,
+    String? externalId,
+    String? firstName,
+    String? lastName,
+  }) async {
+    try {
+      debugPrint(
+          'Klaviyo SDK: Setting profile: $email, $phoneNumber, $externalId, $firstName, $lastName');
+      await _channel.invokeMethod('setProfile', {
+        'email': email,
+        'phoneNumber': phoneNumber,
+        'externalId': externalId,
+        'firstName': firstName,
+        'lastName': lastName,
+      });
+      debugPrint('Klaviyo SDK: Profile set successfully');
+    } on PlatformException catch (e) {
+      debugPrint('Klaviyo SDK: Failed to set profile: ${e.message}');
+      throw Exception('Klaviyo SDK: Failed to set profile: ${e.message}');
     }
   }
 }

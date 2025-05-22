@@ -3,7 +3,7 @@ import UIKit
 import KlaviyoSwift
 import UserNotifications
 
-public class KlaviyoFlutterPlugin: NSObject, FlutterPlugin {
+public class KlaviyoSdkPlugin: NSObject, FlutterPlugin {
     private var tokenEventSink: FlutterEventSink?
     private var notificationEventSink: FlutterEventSink?
     private var initialNotification: [String: Any]?
@@ -14,26 +14,15 @@ public class KlaviyoFlutterPlugin: NSObject, FlutterPlugin {
         let tokenEventChannel = FlutterEventChannel(name: "klaviyo_flutter/token_events", binaryMessenger: registrar.messenger())
         let notificationEventChannel = FlutterEventChannel(name: "klaviyo_flutter/notification_events", binaryMessenger: registrar.messenger())
         
-        let instance = KlaviyoFlutterPlugin()
+        let instance = KlaviyoSdkPlugin()
         instance.channel = channel
         
         registrar.addMethodCallDelegate(instance, channel: channel)
         tokenEventChannel.setStreamHandler(TokenStreamHandler(plugin: instance))
         notificationEventChannel.setStreamHandler(NotificationStreamHandler(plugin: instance))
         
-        // Handle app launch from terminated state
-        instance.handleAppLaunchFromPush()
-    }
-    
-    private func handleAppLaunchFromPush() {
-        if let launchOptions = (UIApplication.shared.delegate as? FlutterAppDelegate)?.launchOptions,
-           let userInfo = launchOptions[UIApplication.LaunchOptionsKey.remoteNotification] as? [AnyHashable: Any] {
-            self.initialNotification = self.formatNotificationData(
-                userInfo: userInfo,
-                fromBackground: false,
-                fromTerminated: true
-            )
-        }
+        // Register for application delegate callbacks
+        registrar.addApplicationDelegate(instance)
     }
     
     public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -84,17 +73,33 @@ public class KlaviyoFlutterPlugin: NSObject, FlutterPlugin {
     }
 
     private func handleSetProfile(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
-        guard let args = call.arguments as? [String: Any],
-              let email = args["email"] as? String,
-              let phoneNumber = args["phoneNumber"] as? String,
-              let externalId = args["externalId"] as? String,
-              let properties = args["properties"] as? [String: Any] else {
-            result(FlutterError(code: "INVALID_ARGUMENTS", message: "Invalid profile arguments", details: nil))
-            return
-        } 
+        guard let args = call.arguments as? [String: Any] else {
+        result(FlutterError(code: "INVALID_ARGUMENTS", message: "Invalid arguments", details: nil))
+        return
+        }
+        let email = args["email"] as? String
+        let phoneNumber = args["phoneNumber"] as? String
+        let externalId = args["externalId"] as? String
+        let firstName = args["firstName"] as? String
+        let lastName = args["lastName"] as? String
+        let properties = args["properties"] as? [String: Any]
+        // Create a profile object
+        let profile = Profile(
+          email: email,
+          phoneNumber: phoneNumber,
+          externalId: externalId,
+          firstName: firstName,
+          lastName: lastName,
+          properties: properties
+        )
 
-        
-        
+        // Set the profile
+        do {
+          try KlaviyoSDK().set(profile: profile)
+          result(true)
+        } catch let error {
+          result(FlutterError(code: "SET_PROFILE_ERROR", message: "Failed to set profile: \(error.localizedDescription)", details: nil))
+      }        
     }
     
     
@@ -113,16 +118,20 @@ public class KlaviyoFlutterPlugin: NSObject, FlutterPlugin {
     @objc private func didRegisterForRemoteNotifications(_ notification: Notification) {
         if let token = notification.object as? Data {
             // Send token to Klaviyo
-            KlaviyoSDK().set(pushToken: token)
-            
-            // Convert token to string and send to Flutter
-            let tokenString = token.map { String(format: "%02.2hhx", $0) }.joined()
-            let tokenData: [String: Any] = [
-                "token": tokenString,
-                "receivedAt": Int64(Date().timeIntervalSince1970 * 1000)
-            ]
-            
-            tokenEventSink?(tokenData)
+            do {
+                try KlaviyoSDK().set(pushToken: token)
+                
+                // Convert token to string and send to Flutter
+                let tokenString = token.map { String(format: "%02.2hhx", $0) }.joined()
+                let tokenData: [String: Any] = [
+                    "token": tokenString,
+                    "receivedAt": Int64(Date().timeIntervalSince1970 * 1000)
+                ]
+                
+                tokenEventSink?(tokenData)
+            } catch {
+                print("Error sending push token to Klaviyo: \(error)")
+            }
         }
     }
     
@@ -175,9 +184,9 @@ public class KlaviyoFlutterPlugin: NSObject, FlutterPlugin {
 // MARK: - Stream Handlers
 
 class TokenStreamHandler: NSObject, FlutterStreamHandler {
-    private weak var plugin: KlaviyoFlutterPlugin?
+    private weak var plugin: KlaviyoSdkPlugin?
     
-    init(plugin: KlaviyoFlutterPlugin) {
+    init(plugin: KlaviyoSdkPlugin) {
         self.plugin = plugin
     }
     
@@ -193,9 +202,9 @@ class TokenStreamHandler: NSObject, FlutterStreamHandler {
 }
 
 class NotificationStreamHandler: NSObject, FlutterStreamHandler {
-    private weak var plugin: KlaviyoFlutterPlugin?
+    private weak var plugin: KlaviyoSdkPlugin?
     
-    init(plugin: KlaviyoFlutterPlugin) {
+    init(plugin: KlaviyoSdkPlugin) {
         self.plugin = plugin
     }
     
@@ -212,7 +221,7 @@ class NotificationStreamHandler: NSObject, FlutterStreamHandler {
 
 // MARK: - UNUserNotificationCenterDelegate
 
-extension KlaviyoFlutterPlugin: UNUserNotificationCenterDelegate {
+extension KlaviyoSdkPlugin: UNUserNotificationCenterDelegate {
     
     // Handle notification when app is in foreground
     public func userNotificationCenter(
@@ -243,7 +252,7 @@ extension KlaviyoFlutterPlugin: UNUserNotificationCenterDelegate {
         let userInfo = response.notification.request.content.userInfo
         
         // Handle Klaviyo tracking
-        KlaviyoSDK().handle(notificationResponse: response)
+        KlaviyoSDK().handle(notificationResponse: response, withCompletionHandler: completionHandler)
         
         let notificationData = formatNotificationData(
             userInfo: userInfo,
@@ -252,7 +261,31 @@ extension KlaviyoFlutterPlugin: UNUserNotificationCenterDelegate {
         )
         
         notificationEventSink?(notificationData)
-        
-        completionHandler()
+    }
+}
+
+// MARK: - FlutterApplicationLifeCycleDelegate
+
+extension KlaviyoSdkPlugin: FlutterApplicationLifeCycleDelegate {
+    // Handle app launch from push notification
+    public func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [AnyHashable : Any] = [:]) -> Bool {
+        if let userInfo = launchOptions[UIApplication.LaunchOptionsKey.remoteNotification] as? [AnyHashable: Any] {
+            self.initialNotification = self.formatNotificationData(
+                userInfo: userInfo,
+                fromBackground: false,
+                fromTerminated: true
+            )
+        }
+        return true
+    }
+    
+    // Handle push token registration
+    public func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) -> Bool {
+        // Post notification for our observer to handle
+        NotificationCenter.default.post(
+            name: NSNotification.Name("DidRegisterForRemoteNotifications"),
+            object: deviceToken
+        )
+        return true
     }
 }
