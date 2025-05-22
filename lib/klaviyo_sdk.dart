@@ -93,9 +93,15 @@ class KlaviyoSdk {
   /// Request push notification permissions
   Future<bool> requestPushPermissions() async {
     try {
+      if (Platform.isAndroid) {
+        debugPrint(
+            'Klaviyo SDK: Please use Firebase Cloud Messaging for Android');
+        return false;
+      }
+
       debugPrint('Klaviyo SDK: Requesting push permissions');
       final result = await _channel.invokeMethod('requestPushPermissions');
-      debugPrint('Klaviyo SDK: Push permissions requested: $result'); 
+      debugPrint('Klaviyo SDK: Push permissions requested: $result');
       return result ?? false;
     } on PlatformException catch (e) {
       debugPrint(
@@ -117,8 +123,7 @@ class KlaviyoSdk {
     _notificationStream ??= _notificationEventChannel
         .receiveBroadcastStream()
         .map((data) =>
-            KlaviyoPushNotification.fromMap(
-            Map<String, dynamic>.from(data)));
+            KlaviyoPushNotification.fromMap(Map<String, dynamic>.from(data)));
     return _notificationStream!;
   }
 
@@ -166,4 +171,14 @@ class KlaviyoSdk {
       throw Exception('Klaviyo SDK: Failed to set profile: ${e.message}');
     }
   }
+
+  // set push token
+  Future<void> setPushToken(String token) async {
+    try {
+      await _channel.invokeMethod('setPushToken', {'token': token});
+    } on PlatformException catch (e) {
+      throw Exception('Klaviyo SDK: Failed to set push token: ${e.message}');
+    }
+  }
+  
 }
