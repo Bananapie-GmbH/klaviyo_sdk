@@ -1,7 +1,11 @@
 package com.bananapie.klaviyo_sdk
 
+import android.Manifest
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import androidx.annotation.NonNull
 import com.klaviyo.analytics.Klaviyo
 import com.klaviyo.analytics.Klaviyo.isKlaviyoIntent
@@ -23,17 +27,27 @@ import com.klaviyo.pushFcm.KlaviyoRemoteMessage.isKlaviyoMessage
 import java.util.concurrent.CopyOnWriteArrayList
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
+import androidx.core.app.ActivityCompat
+import androidx.core.app.ActivityCompat.shouldShowRequestPermissionRationale
+import androidx.core.content.ContextCompat
+import io.flutter.plugin.common.PluginRegistry
+import io.flutter.embedding.engine.plugins.activity.ActivityAware
+import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
 
-private const val CHANNEL_NAME = "klaviyo_flutter"
-private const val TOKEN_EVENT_CHANNEL = "klaviyo_flutter/token_events"
-private const val NOTIFICATION_EVENT_CHANNEL = "klaviyo_flutter/notification_events"
+
+
+private const val CHANNEL_NAME = "klaviyo_sdk"
+private const val TOKEN_EVENT_CHANNEL = "klaviyo_sdk/token_events"
+private const val NOTIFICATION_EVENT_CHANNEL = "klaviyo_sdk/notification_events"
 
 /** KlaviyoSdkPlugin */
-class KlaviyoSdkPlugin: FlutterPlugin, MethodCallHandler {
+class KlaviyoSdkPlugin : FlutterPlugin, MethodCallHandler, ActivityAware, PluginRegistry.RequestPermissionsResultListener {
   /// The MethodChannel that will the communication between Flutter and native Android
   ///
   /// This local reference serves to register the plugin with the Flutter Engine and unregister it
   /// when the Flutter Engine is detached from the Activity
+  private var activity: Activity? = null
   private lateinit var channel: MethodChannel
   private lateinit var tokenEventChannel: EventChannel
   private lateinit var notificationEventChannel: EventChannel
@@ -56,7 +70,7 @@ class KlaviyoSdkPlugin: FlutterPlugin, MethodCallHandler {
   override fun onAttachedToEngine(@NonNull binding: FlutterPlugin.FlutterPluginBinding) {
     channel = MethodChannel(binding.binaryMessenger, CHANNEL_NAME)
     channel.setMethodCallHandler(this)
-    
+
     // Set up event channels
     tokenEventChannel = EventChannel(binding.binaryMessenger, TOKEN_EVENT_CHANNEL)
     tokenEventChannel.setStreamHandler(object : EventChannel.StreamHandler {
@@ -73,6 +87,7 @@ class KlaviyoSdkPlugin: FlutterPlugin, MethodCallHandler {
     notificationEventChannel.setStreamHandler(object : EventChannel.StreamHandler {
       override fun onListen(arguments: Any?, events: EventChannel.EventSink) {
         notificationEventSink = events
+        // Deliver any pending notifications when stream is ready
         deliverPendingNotifications()
       }
       
@@ -173,7 +188,24 @@ class KlaviyoSdkPlugin: FlutterPlugin, MethodCallHandler {
         "requestPushPermissions" -> {
           // This is handled by the FCM integration
           // The app needs to request notification permissions and handle FCM token
-          result.success(true)
+          Log.d("KlaviyoSDK", "Checking notification permission for Android version: ${Build.VERSION.SDK_INT}")
+          // This is only necessary for API level >= 33 (TIRAMISU)
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+              if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
+                  PackageManager.PERMISSION_GRANTED
+              ) {
+                  Log.d("KlaviyoSDK", "Notification permission is already granted")
+                  result.success(true)
+              } else {
+                  permissionResult = result
+                  Log.d("KlaviyoSDK", "Need to request notification permission")
+                  ActivityCompat.requestPermissions(
+                    activity!!,
+                    arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                    PERMISSION_REQUEST_CODE
+                  )
+              }
+          }
         }
         "setPushToken" -> {
           val token = call.argument<String>("token")
@@ -292,28 +324,46 @@ class KlaviyoSdkPlugin: FlutterPlugin, MethodCallHandler {
   }
   
   // Deliver notification to Flutter or store for later
-  private fun deliverNotification(notificationData: Map<String, Any>) {
-    mainHandler.post {
-      if (notificationEventSink != null) {
-        notificationEventSink?.success(notificationData)
-      } else {
-        // Store for later delivery
-        pendingBackgroundNotifications.add(notificationData)
+  fun deliverNotification(notificationData: Map<String, Any>) {
+    try {
+      mainHandler.post {
+        if (notificationEventSink != null) {
+          try {
+            notificationEventSink?.success(notificationData)
+          } catch (e: Exception) {
+            Log.e("KlaviyoSDK", "Error delivering notification to Flutter: ${e.message}")
+          }
+        } else {
+          // Store for later delivery
+          pendingBackgroundNotifications.add(notificationData)
+        }
       }
+    } catch (e: Exception) {
+      Log.e("KlaviyoSDK", "Error in deliverNotification: ${e.message}")
     }
   }
   
   // Deliver pending notifications when Flutter is ready
   private fun deliverPendingNotifications() {
-    if (notificationEventSink == null || pendingBackgroundNotifications.isEmpty()) {
+    if (notificationEventSink == null) {
       return
     }
     
-    mainHandler.post {
-      for (notification in pendingBackgroundNotifications) {
-        notificationEventSink?.success(notification)
+    try {
+      mainHandler.post {
+        if (!pendingBackgroundNotifications.isEmpty()) {
+          for (notification in pendingBackgroundNotifications) {
+            try {
+              notificationEventSink?.success(notification)
+            } catch (e: Exception) {
+              Log.e("KlaviyoSDK", "Error delivering pending notification: ${e.message}")
+            }
+          }
+          pendingBackgroundNotifications.clear()
+        }
       }
-      pendingBackgroundNotifications.clear()
+    } catch (e: Exception) {
+      Log.e("KlaviyoSDK", "Error in deliverPendingNotifications: ${e.message}")
     }
   }
   
@@ -340,18 +390,65 @@ class KlaviyoSdkPlugin: FlutterPlugin, MethodCallHandler {
   }
 
   companion object {
+    private const val PERMISSION_REQUEST_CODE = 123
+    private var permissionResult: Result? = null
+
     // Static reference to the plugin instance for use in FCM service
     @JvmStatic
     private var instance: KlaviyoSdkPlugin? = null
-    
+
     @JvmStatic
     fun getInstance(): KlaviyoSdkPlugin? {
       return instance
     }
-    
+
     @JvmStatic
     fun setInstance(plugin: KlaviyoSdkPlugin?) {
       instance = plugin
     }
+  }
+
+  override fun onRequestPermissionsResult(
+    requestCode: Int,
+    permissions: Array<String>,
+    grantResults: IntArray
+  ): Boolean {
+    Log.d("KlaviyoSDK", "Permission result received - requestCode: $requestCode")
+
+    if (requestCode == PERMISSION_REQUEST_CODE) {
+      val granted = grantResults.isNotEmpty() &&
+              grantResults[0] == PackageManager.PERMISSION_GRANTED
+
+      Log.d("KlaviyoSDK", "Notification permission ${if (granted) "granted" else "denied"}")
+
+      if (permissionResult == null) {
+        Log.e("KlaviyoSDK", "Permission result callback is null")
+      }
+
+      permissionResult?.success(granted)
+      permissionResult = null
+      return true
+    } else {
+      Log.d("KlaviyoSDK", "Received permission result for unknown request code: $requestCode")
+    }
+    return false
+  }
+
+  override fun onAttachedToActivity(binding: ActivityPluginBinding) {
+    activity = binding.activity
+    binding.addRequestPermissionsResultListener(this)
+  }
+
+  override fun onDetachedFromActivityForConfigChanges() {
+    activity = null
+  }
+
+  override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {
+    activity = binding.activity
+    binding.addRequestPermissionsResultListener(this)
+  }
+
+  override fun onDetachedFromActivity() {
+    activity = null
   }
 }

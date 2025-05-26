@@ -70,11 +70,11 @@ class KlaviyoPushNotification {
 
 /// Main Klaviyo Flutter plugin class
 class KlaviyoSdk {
-  static const MethodChannel _channel = MethodChannel('klaviyo_flutter');
+  static const MethodChannel _channel = MethodChannel('klaviyo_sdk');
   static const EventChannel _tokenEventChannel =
-      EventChannel('klaviyo_flutter/token_events');
+      EventChannel('klaviyo_sdk/token_events');
   static const EventChannel _notificationEventChannel =
-      EventChannel('klaviyo_flutter/notification_events');
+      EventChannel('klaviyo_sdk/notification_events');
 
   static KlaviyoSdk? _instance;
   static KlaviyoSdk get instance => _instance ??= KlaviyoSdk._();
@@ -96,12 +96,6 @@ class KlaviyoSdk {
   /// Request push notification permissions
   Future<bool> requestPushPermissions() async {
     try {
-      if (Platform.isAndroid) {
-        debugPrint(
-            'Klaviyo SDK: Please use Firebase Cloud Messaging for Android');
-        return false;
-      }
-
       debugPrint('Klaviyo SDK: Requesting push permissions');
       final result = await _channel.invokeMethod('requestPushPermissions');
       debugPrint('Klaviyo SDK: Push permissions requested: $result');

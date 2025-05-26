@@ -10,9 +10,9 @@ public class KlaviyoSdkPlugin: NSObject, FlutterPlugin {
     private var channel: FlutterMethodChannel?
     
     public static func register(with registrar: FlutterPluginRegistrar) {
-        let channel = FlutterMethodChannel(name: "klaviyo_flutter", binaryMessenger: registrar.messenger())
-        let tokenEventChannel = FlutterEventChannel(name: "klaviyo_flutter/token_events", binaryMessenger: registrar.messenger())
-        let notificationEventChannel = FlutterEventChannel(name: "klaviyo_flutter/notification_events", binaryMessenger: registrar.messenger())
+        let channel = FlutterMethodChannel(name: "klaviyo_sdk", binaryMessenger: registrar.messenger())
+        let tokenEventChannel = FlutterEventChannel(name: "klaviyo_sdk/token_events", binaryMessenger: registrar.messenger())
+        let notificationEventChannel = FlutterEventChannel(name: "klaviyo_sdk/notification_events", binaryMessenger: registrar.messenger())
         
         let instance = KlaviyoSdkPlugin()
         instance.channel = channel
@@ -35,10 +35,24 @@ public class KlaviyoSdkPlugin: NSObject, FlutterPlugin {
             handleGetInitialNotification(result: result)
         case "setProfile":
             handleSetProfile(call, result: result)
+        case "setPushToken":
+            handleSetPushToken(call, result: result)
         default:
             result(FlutterMethodNotImplemented)
         }
     }
+
+    private func handleSetPushToken(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard let args = call.arguments as? [String: Any],
+              let token = args["token"] as? String else {
+            result(FlutterError(code: "INVALID_ARGUMENTS", message: "Push token is required", details: nil))
+            return
+        }
+        
+        KlaviyoSDK().set(pushToken: token)
+        result(true)
+    }
+    
     
     private func handleInitialize(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         guard let args = call.arguments as? [String: Any],

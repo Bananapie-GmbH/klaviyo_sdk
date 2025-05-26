@@ -1,8 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    
     <application>
         <service
-            android:name=".KlaviyoFirebaseMessagingService"
+            android:name="com.bananapie.klaviyo_sdk.KlaviyoFirebaseMessagingService"
             android:exported="false">
             <intent-filter>
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
