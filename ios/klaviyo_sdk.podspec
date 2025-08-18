@@ -16,8 +16,9 @@ A Flutter plugin for integrating Klaviyo's push notifications, event tracking, a
   s.source_files = 'Classes/**/*'
   s.dependency 'Flutter'
   
-  # Specify exact versions for Klaviyo dependencies
+  # Klaviyo dependencies used by KlaviyoBridge.swift
   s.dependency 'KlaviyoSwift', '~> 4.2.1'
+  # s.dependency 'KlaviyoForms', '~> 4.2.1'
   s.ios.deployment_target = '13.0'
 
   # Flutter.framework does not contain a i386 slice.
