@@ -47,6 +47,7 @@ abstract class KlaviyoSdkPlatform extends PlatformInterface {
     String? externalId,
     String? firstName,
     String? lastName,
+    Map<String, dynamic>? location,
     Map<String, dynamic>? properties,
   }) {
     throw UnimplementedError('setProfile() has not been implemented.');
@@ -80,5 +81,10 @@ abstract class KlaviyoSdkPlatform extends PlatformInterface {
   /// Handle a push notification
   Future<bool> handlePush(Map<String, dynamic>? payload) {
     throw UnimplementedError('handlePush() has not been implemented.');
+  }
+
+  /// Get the stream of messages received from Klaviyo
+  Stream<Map<String, dynamic>?> get onMessageReceived {
+    throw UnimplementedError('onMessageReceived() has not been implemented.');
   }
 }

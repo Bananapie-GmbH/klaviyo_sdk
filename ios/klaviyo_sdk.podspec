@@ -18,6 +18,7 @@ A Flutter plugin for integrating Klaviyo's push notifications, event tracking, a
   
   # Klaviyo dependencies used by KlaviyoBridge.swift
   s.dependency 'KlaviyoSwift', '~> 4.2.1'
+  
   # s.dependency 'KlaviyoForms', '~> 4.2.1'
   s.ios.deployment_target = '13.0'
 

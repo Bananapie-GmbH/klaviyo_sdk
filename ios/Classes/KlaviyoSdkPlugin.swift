@@ -1,14 +1,30 @@
 import Flutter
 import UIKit
 import UserNotifications
+import KlaviyoSwift
 
-@objc public class KlaviyoSdkPlugin: NSObject, FlutterPlugin {
+@objc public class KlaviyoSdkPlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
     private static let channelName = "klaviyo_sdk"
+    private var eventChannel: FlutterEventChannel?
+    private var eventSink: FlutterEventSink?
+    
+    // Static instance for easy access
+    private static var sharedInstance: KlaviyoSdkPlugin?
 
     public static func register(with registrar: FlutterPluginRegistrar) {
         let channel = FlutterMethodChannel(name: channelName, binaryMessenger: registrar.messenger())
         let instance = KlaviyoSdkPlugin()
+        sharedInstance = instance
         registrar.addMethodCallDelegate(instance, channel: channel)
+        
+        // Set up event channel for streaming messages
+        let eventChannel = FlutterEventChannel(name: "klaviyo_sdk/notification_events", binaryMessenger: registrar.messenger())
+        eventChannel.setStreamHandler(instance)
+    }
+    
+    // Static method to emit messages from anywhere in the app
+    @objc public static func emitMessageReceived(_ payload: [String: Any]?) {
+        sharedInstance?.emitMessageReceived(payload)
     }
 
     public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -147,9 +163,54 @@ import UserNotifications
             // No-op on iOS for now; return true to indicate handled
             result(true)
 
+        case "_emitMessageReceived":
+            // This method is used internally to trigger the onMessageReceived stream
+            // No need to return anything as it's just triggering an event
+            result(nil)
+
         default:
             result(FlutterMethodNotImplemented)
         }
+    }
+
+    // MARK: - FlutterStreamHandler
+    public func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
+        self.eventSink = events
+        return nil
+    }
+
+    public func onCancel(withArguments arguments: Any?) -> FlutterError? {
+        self.eventSink = nil
+        return nil
+    }
+
+    // MARK: - Public method to emit messages
+    public func emitMessageReceived(_ payload: [String: Any]?) {
+        DispatchQueue.main.async {
+            self.eventSink?(payload)
+        }
+    }
+    
+    // MARK: - Public method to handle notification responses
+    @objc public static func handleNotificationResponse(_ response: UNNotificationResponse, completionHandler: @escaping () -> Void) -> Bool {
+        // Handle the notification response using KlaviyoSDK
+        let handled = KlaviyoSDK().handle(notificationResponse: response, withCompletionHandler: completionHandler) { url in
+            print("deep link is ", url)
+            
+            // Extract notification payload
+            let notification = response.notification
+            let userInfo = notification.request.content.userInfo
+            
+            // Create payload with deep link and notification data
+            var payload: [String: Any] = [:]
+            payload["url"] = url.absoluteString
+            payload["message"] = userInfo
+            
+            // Emit message received to trigger onMessageReceived stream
+            Self.emitMessageReceived(payload)
+        }
+        
+        return handled
     }
 
     private func requestPushAuthorization(result: @escaping FlutterResult) {

@@ -10,6 +10,10 @@ class MethodChannelKlaviyoSdk extends KlaviyoSdkPlatform {
   /// The method channel used to interact with the native platform.
   @visibleForTesting
   final methodChannel = const MethodChannel('klaviyo_sdk');
+  
+  /// The event channel used for streaming messages.
+  @visibleForTesting
+  final eventChannel = const EventChannel('klaviyo_sdk/notification_events');
 
   @override
   Future<String?> getPlatformVersion() async {
@@ -26,7 +30,6 @@ class MethodChannelKlaviyoSdk extends KlaviyoSdkPlatform {
   @override
   Future<bool> initialize(String apiKey) async {
     try {
-
       final success = await methodChannel
           .invokeMethod<bool>('initialize', {'apiKey': apiKey});
       return success ?? false;
@@ -43,6 +46,7 @@ class MethodChannelKlaviyoSdk extends KlaviyoSdkPlatform {
     String? externalId,
     String? firstName,
     String? lastName,
+    Map<String, dynamic>? location,
     Map<String, dynamic>? properties,
   }) async {
     try {
@@ -52,6 +56,7 @@ class MethodChannelKlaviyoSdk extends KlaviyoSdkPlatform {
         if (externalId != null) 'externalId': externalId,
         if (firstName != null) 'firstName': firstName,
         if (lastName != null) 'lastName': lastName,
+        if (location != null) 'location': location,
         if (properties != null) 'properties': properties,
       };
       final success =
@@ -123,8 +128,7 @@ class MethodChannelKlaviyoSdk extends KlaviyoSdkPlatform {
   @override
   Future<bool> handlePush(Map<String, dynamic>? payload) async {
     try {
-      final success =
-          await methodChannel
+      final success = await methodChannel
           .invokeMethod<bool>('handlePush', {'payload': payload});
       return success ?? false;
     } on PlatformException catch (e) {
@@ -133,10 +137,13 @@ class MethodChannelKlaviyoSdk extends KlaviyoSdkPlatform {
     }
   }
 
-  @override
-  Future<bool> setupNativeMethodCalls(
-      Future<dynamic> Function(MethodCall)? handler) async {
-    methodChannel.setMethodCallHandler(handler);
-    return true;
+  /// Get the stream of messages received from Klaviyo
+  Stream<Map<String, dynamic>?> get onMessageReceived {
+    return eventChannel.receiveBroadcastStream().map((event) {
+      if (event is Map) {
+        return Map<String, dynamic>.from(event);
+      }
+      return null;
+    });
   }
 }

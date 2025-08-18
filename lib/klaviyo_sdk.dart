@@ -1,181 +1,155 @@
-import 'dart:async';
-import 'dart:io';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'klaviyo_sdk_platform_interface.dart';
+import 'klaviyo_sdk_method_channel.dart';
+import 'dart:async';
 
-// TODO stream data back to flutter
-// Dont forget to update MainActivity.kt in the target app with the example code from the example app
-
-/// Class representing push token data
-class KlaviyoPushToken {
-  final String token;
-  final DateTime receivedAt;
-
-  const KlaviyoPushToken({
-    required this.token,
-    required this.receivedAt,
-  });
-
-  factory KlaviyoPushToken.fromMap(Map<String, dynamic> map) {
-    return KlaviyoPushToken(
-      token: map['token'] ?? '',
-      receivedAt: DateTime.fromMillisecondsSinceEpoch(map['receivedAt'] ?? 0),
-    );
-  }
-
-  Map<String, dynamic> toMap() {
-    return {
-      'token': token,
-      'receivedAt': receivedAt.millisecondsSinceEpoch,
-    };
-  }
-}
-
-/// Class representing push notification data
-class KlaviyoPushNotification {
-  final Map<String, dynamic> data;
-  final String? title;
-  final String? body;
-  final bool fromBackground;
-  final bool fromTerminated;
-
-  const KlaviyoPushNotification({
-    required this.data,
-    this.title,
-    this.body,
-    required this.fromBackground,
-    required this.fromTerminated,
-  });
-
-  factory KlaviyoPushNotification.fromMap(Map<String, dynamic> map) {
-    return KlaviyoPushNotification(
-      data: Map<String, dynamic>.from(map['data'] ?? {}),
-      title: map['title'],
-      body: map['body'],
-      fromBackground: map['fromBackground'] ?? false,
-      fromTerminated: map['fromTerminated'] ?? false,
-    );
-  }
-
-  Map<String, dynamic> toMap() {
-    return {
-      'data': data,
-      'title': title,
-      'body': body,
-      'fromBackground': fromBackground,
-      'fromTerminated': fromTerminated,
-    };
-  }
-}
-
-/// Main Klaviyo Flutter plugin class
 class KlaviyoSdk {
-  static const MethodChannel _channel = MethodChannel('klaviyo_sdk');
-  static const EventChannel _tokenEventChannel =
-      EventChannel('klaviyo_sdk/token_events');
-  static const EventChannel _notificationEventChannel =
-      EventChannel('klaviyo_sdk/notification_events');
+  KlaviyoSdk._internal();
+  static final KlaviyoSdk instance = KlaviyoSdk._internal();
 
-  static KlaviyoSdk? _instance;
-  static KlaviyoSdk get instance => _instance ??= KlaviyoSdk._();
-
-  KlaviyoSdk._();
-
-  Stream<KlaviyoPushToken>? _tokenStream;
-  Stream<KlaviyoPushNotification>? _notificationStream;
-
-  /// Initialize Klaviyo SDK with API key
-  Future<void> initialize(String apiKey) async {
-    try {
-      await _channel.invokeMethod('initialize', {'apiKey': apiKey});
-    } on PlatformException catch (e) {
-      throw Exception('Failed to initialize Klaviyo: ${e.message}');
+  /// Stream that emits events when Klaviyo messages are received
+  /// Listen to this stream to handle incoming Klaviyo notifications
+  ///
+  /// Example:
+  /// ```dart
+  /// KlaviyoSdk.instance.onMessageReceived.listen((payload) {
+  ///   print('Klaviyo message received: $payload');
+  ///   // Handle the message here
+  /// });
+  /// ```
+  Stream<Map<String, dynamic>?> get onMessageReceived {
+    if (KlaviyoSdkPlatform.instance is MethodChannelKlaviyoSdk) {
+      return (KlaviyoSdkPlatform.instance as MethodChannelKlaviyoSdk)
+          .onMessageReceived;
     }
+    // Fallback to empty stream if not using method channel
+    return const Stream.empty();
   }
 
-  /// Request push notification permissions
-  Future<bool> requestPushPermissions() async {
-    try {
-      debugPrint('Klaviyo SDK: Requesting push permissions');
-      final result = await _channel.invokeMethod('requestPushPermissions');
-      debugPrint('Klaviyo SDK: Push permissions requested: $result');
-      return result ?? false;
-    } on PlatformException catch (e) {
-      debugPrint(
-          'Klaviyo SDK: Failed to request push permissions: ${e.message}');
-      throw Exception(
-          'Klaviyo SDK: Failed to request push permissions: ${e.message}');
-    }
+  Future<String?> getPlatformVersion() {
+    return KlaviyoSdkPlatform.instance.getPlatformVersion();
   }
 
-  /// Stream of push token updates
-  Stream<KlaviyoPushToken> get onTokenReceived {
-    _tokenStream ??= _tokenEventChannel.receiveBroadcastStream().map(
-        (data) => KlaviyoPushToken.fromMap(Map<String, dynamic>.from(data)));
-    return _tokenStream!;
+  Future<bool> initialize(String apiKey) {
+    return KlaviyoSdkPlatform.instance.initialize(apiKey);
   }
 
-  /// Stream of push notification received
-  Stream<KlaviyoPushNotification> get onNotificationReceived {
-    _notificationStream ??= _notificationEventChannel
-        .receiveBroadcastStream()
-        .map((data) =>
-            KlaviyoPushNotification.fromMap(Map<String, dynamic>.from(data)));
-    return _notificationStream!;
-  }
+  // TODO: Add inAppForms support
+  // Future<bool> registerForInAppForms({Duration? sessionTimeoutDuration}) async {
+  //   // Forms integration disabled; return success no-op
+  //   return true;
+  // }
 
-  /// Get initial push notification if app was launched from terminated state
-  Future<KlaviyoPushNotification?> getInitialNotification() async {
-    try {
-      debugPrint('Klaviyo SDK: Getting initial notification');
-      final result = await _channel.invokeMethod('getInitialNotification');
-      if (result != null) {
-        debugPrint(
-            'Klaviyo SDK: Initial notification received: ${result.toString()}');
-        return KlaviyoPushNotification.fromMap(
-            Map<String, dynamic>.from(result));
-      }
-      return null;
-    } on PlatformException catch (e) {
-      debugPrint(
-          'Klaviyo SDK: Failed to get initial notification: ${e.message}');
-      throw Exception(
-          'Klaviyo SDK: Failed to get initial notification: ${e.message}');
-    }
-  }
+  // Future<bool> unregisterFromInAppForms() async {
+  //   // Forms integration disabled; return success no-op
+  //   return true;
+  // }
 
-  /// Set profile
-  Future<void> setProfile({
+  Future<bool> setProfile({
     String? email,
     String? phoneNumber,
     String? externalId,
     String? firstName,
     String? lastName,
-  }) async {
-    try {
-      debugPrint(
-          'Klaviyo SDK: Setting profile: $email, $phoneNumber, $externalId, $firstName, $lastName');
-      await _channel.invokeMethod('setProfile', {
-        'email': email,
-        'phoneNumber': phoneNumber,
-        'externalId': externalId,
-        'firstName': firstName,
-        'lastName': lastName,
-      });
-      debugPrint('Klaviyo SDK: Profile set successfully');
-    } on PlatformException catch (e) {
-      debugPrint('Klaviyo SDK: Failed to set profile: ${e.message}');
-      throw Exception('Klaviyo SDK: Failed to set profile: ${e.message}');
-    }
+    Map<String, dynamic>? location,
+    Map<String, dynamic>? properties,
+  }) {
+    final args = <String, dynamic>{
+      if (email != null) 'email': email,
+      if (phoneNumber != null) 'phoneNumber': phoneNumber,
+      if (externalId != null) 'externalId': externalId,
+      if (firstName != null) 'firstName': firstName,
+      if (lastName != null) 'lastName': lastName,
+      if (location != null) 'location': location,
+      if (properties != null) 'properties': properties,
+    };
+    return KlaviyoSdkPlatform.instance.setProfile(
+      email: email,
+      phoneNumber: phoneNumber,
+      externalId: externalId,
+      firstName: firstName,
+      lastName: lastName,
+      properties: properties,
+    );
   }
 
-  // set push token
-  Future<void> setPushToken(String token) async {
-    try {
-      await _channel.invokeMethod('setPushToken', {'token': token});
-    } on PlatformException catch (e) {
-      throw Exception('Klaviyo SDK: Failed to set push token: ${e.message}');
-    }
+  Future<bool> resetProfile() {
+    return KlaviyoSdkPlatform.instance.resetProfile();
   }
-  
+
+  Future<bool> createEvent({
+    required String name,
+    Map<String, dynamic>? properties,
+    double? value,
+  }) {
+    return KlaviyoSdkPlatform.instance.createEvent(
+      name: name,
+      properties: properties,
+      value: value,
+    );
+  }
+
+  Future<bool> registerForPushNotifications() {
+    return KlaviyoSdkPlatform.instance.registerForPushNotifications();
+  }
+
+  Future<bool> setPushToken(String token) {
+    return KlaviyoSdkPlatform.instance.setPushToken(token);
+  }
+
+  Future<bool> handlePush(Map<String, dynamic>? payload) {
+    return KlaviyoSdkPlatform.instance.handlePush(payload);
+  }
+
+  // Convenience attribute setters/getters using the iOS bridge methods
+  Future<void> setExternalId(String value) async {
+    const channel = MethodChannel('klaviyo_sdk');
+    await channel.invokeMethod('setExternalId', {'value': value});
+  }
+
+  Future<String> getExternalId() async {
+    const channel = MethodChannel('klaviyo_sdk');
+    return (await channel.invokeMethod<String>('getExternalId')) ?? '';
+  }
+
+  Future<void> setEmail(String value) async {
+    const channel = MethodChannel('klaviyo_sdk');
+    await channel.invokeMethod('setEmail', {'value': value});
+  }
+
+  Future<String> getEmail() async {
+    const channel = MethodChannel('klaviyo_sdk');
+    return (await channel.invokeMethod<String>('getEmail')) ?? '';
+  }
+
+  Future<void> setPhoneNumber(String value) async {
+    const channel = MethodChannel('klaviyo_sdk');
+    await channel.invokeMethod('setPhoneNumber', {'value': value});
+  }
+
+  Future<String> getPhoneNumber() async {
+    const channel = MethodChannel('klaviyo_sdk');
+    return (await channel.invokeMethod<String>('getPhoneNumber')) ?? '';
+  }
+
+  Future<void> setBadgeCount(int count) async {
+    const channel = MethodChannel('klaviyo_sdk');
+    await channel.invokeMethod('setBadgeCount', {'count': count});
+  }
+
+  Future<Map<String, String>> getEventTypesKeys() async {
+    const channel = MethodChannel('klaviyo_sdk');
+    final map =
+        await channel.invokeMethod<Map<dynamic, dynamic>>('getEventTypesKeys');
+    return map?.map((key, value) => MapEntry(key as String, value as String)) ??
+        <String, String>{};
+  }
+
+  Future<Map<String, String>> getProfilePropertyKeys() async {
+    const channel = MethodChannel('klaviyo_sdk');
+    final map = await channel
+        .invokeMethod<Map<dynamic, dynamic>>('getProfilePropertyKeys');
+    return map?.map((key, value) => MapEntry(key as String, value as String)) ??
+        <String, String>{};
+  }
 }
