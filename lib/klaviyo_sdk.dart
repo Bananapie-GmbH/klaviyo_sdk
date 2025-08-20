@@ -97,10 +97,6 @@ class KlaviyoSdk {
     return KlaviyoSdkPlatform.instance.setPushToken(token);
   }
 
-  Future<bool> handlePush(Map<String, dynamic>? payload) {
-    return KlaviyoSdkPlatform.instance.handlePush(payload);
-  }
-
   // Convenience attribute setters/getters using the iOS bridge methods
   Future<void> setExternalId(String value) async {
     const channel = MethodChannel('klaviyo_sdk');

@@ -3,7 +3,7 @@ package com.example.klaviyo_sdk_example
 import io.flutter.embedding.android.FlutterActivity
 import android.content.Intent
 import android.os.Bundle
-import com.bananapie.klaviyo_sdk.KlaviyoNotificationHelper
+import com.bananapie.klaviyo_sdk.KlaviyoSdkPlugin
 
 class MainActivity: FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -16,6 +16,6 @@ class MainActivity: FlutterActivity() {
         super.onNewIntent(intent)
         
         // Check if app was launched from notification
-        KlaviyoNotificationHelper.checkForNotificationLaunch(applicationContext, intent)
+        KlaviyoSdkPlugin.handlePushIntent(intent)
     }
 } 

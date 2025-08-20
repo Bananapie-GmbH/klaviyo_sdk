@@ -126,18 +126,6 @@ class MethodChannelKlaviyoSdk extends KlaviyoSdkPlatform {
   }
 
   @override
-  Future<bool> handlePush(Map<String, dynamic>? payload) async {
-    try {
-      final success = await methodChannel
-          .invokeMethod<bool>('handlePush', {'payload': payload});
-      return success ?? false;
-    } on PlatformException catch (e) {
-      debugPrint('Error handling push: ${e.message}');
-      rethrow;
-    }
-  }
-
-  /// Get the stream of messages received from Klaviyo
   Stream<Map<String, dynamic>?> get onMessageReceived {
     return eventChannel.receiveBroadcastStream().map((event) {
       if (event is Map) {

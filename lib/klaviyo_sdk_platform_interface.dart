@@ -78,11 +78,6 @@ abstract class KlaviyoSdkPlatform extends PlatformInterface {
     throw UnimplementedError('setPushToken() has not been implemented.');
   }
 
-  /// Handle a push notification
-  Future<bool> handlePush(Map<String, dynamic>? payload) {
-    throw UnimplementedError('handlePush() has not been implemented.');
-  }
-
   /// Get the stream of messages received from Klaviyo
   Stream<Map<String, dynamic>?> get onMessageReceived {
     throw UnimplementedError('onMessageReceived() has not been implemented.');

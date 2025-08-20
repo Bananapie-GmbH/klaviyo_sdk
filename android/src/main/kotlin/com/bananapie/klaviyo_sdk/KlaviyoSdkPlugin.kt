@@ -1,454 +1,354 @@
 package com.bananapie.klaviyo_sdk
 
-import android.Manifest
 import android.app.Activity
 import android.content.Context
-import android.content.Intent
-import android.content.pm.PackageManager
 import android.os.Build
-import androidx.annotation.NonNull
+import android.os.Handler
+import android.os.Looper
+import android.content.Intent
+import android.util.Log
+import io.flutter.embedding.engine.plugins.FlutterPlugin
+import io.flutter.embedding.engine.plugins.activity.ActivityAware
+import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
+import io.flutter.plugin.common.EventChannel
+import io.flutter.plugin.common.MethodCall
+import io.flutter.plugin.common.MethodChannel
+import java.io.Serializable
+import kotlin.reflect.KVisibility
+
+// Klaviyo SDK imports
 import com.klaviyo.analytics.Klaviyo
-import com.klaviyo.analytics.Klaviyo.isKlaviyoIntent
 import com.klaviyo.analytics.model.Event
 import com.klaviyo.analytics.model.EventKey
 import com.klaviyo.analytics.model.EventMetric
+import com.klaviyo.analytics.model.Keyword
 import com.klaviyo.analytics.model.Profile
 import com.klaviyo.analytics.model.ProfileKey
+ 
 
-import io.flutter.embedding.engine.plugins.FlutterPlugin
-import io.flutter.plugin.common.MethodCall
-import io.flutter.plugin.common.MethodChannel
-import io.flutter.plugin.common.MethodChannel.MethodCallHandler
-import io.flutter.plugin.common.MethodChannel.Result
-import io.flutter.plugin.common.EventChannel
-import java.io.Serializable
-import com.google.firebase.messaging.RemoteMessage
-import com.klaviyo.pushFcm.KlaviyoRemoteMessage.isKlaviyoMessage
-import java.util.concurrent.CopyOnWriteArrayList
-import android.os.Handler
-import android.os.Looper
-import android.util.Log
-import androidx.core.app.ActivityCompat
-import androidx.core.app.ActivityCompat.shouldShowRequestPermissionRationale
-import androidx.core.content.ContextCompat
-import io.flutter.plugin.common.PluginRegistry
-import io.flutter.embedding.engine.plugins.activity.ActivityAware
-import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
+/**
+ * Flutter plugin bridging Klaviyo Android SDK via MethodChannel/EventChannel.
+ */
+class KlaviyoSdkPlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
+    EventChannel.StreamHandler, ActivityAware {
 
+    companion object {
+        private const val METHOD_CHANNEL_NAME = "klaviyo_sdk"
+        private const val EVENT_CHANNEL_NAME = "klaviyo_sdk/notification_events"
 
+        private const val LOCATION = "location"
+        private const val PROPERTIES = "properties"
+        
+        // Static reference to the plugin instance for MainActivity access
+        @JvmStatic
+        private var instance: KlaviyoSdkPlugin? = null
+        
+        @JvmStatic
+        fun getInstance(): KlaviyoSdkPlugin? = instance
 
-private const val CHANNEL_NAME = "klaviyo_sdk"
-private const val TOKEN_EVENT_CHANNEL = "klaviyo_sdk/token_events"
-private const val NOTIFICATION_EVENT_CHANNEL = "klaviyo_sdk/notification_events"
-
-/** KlaviyoSdkPlugin */
-class KlaviyoSdkPlugin : FlutterPlugin, MethodCallHandler, ActivityAware, PluginRegistry.RequestPermissionsResultListener {
-  /// The MethodChannel that will the communication between Flutter and native Android
-  ///
-  /// This local reference serves to register the plugin with the Flutter Engine and unregister it
-  /// when the Flutter Engine is detached from the Activity
-  private var activity: Activity? = null
-  private lateinit var channel: MethodChannel
-  private lateinit var tokenEventChannel: EventChannel
-  private lateinit var notificationEventChannel: EventChannel
-  private lateinit var context: Context
-  private var flutterPluginBinding: FlutterPlugin.FlutterPluginBinding? = null
-  
-  // Event sinks for streaming data to Flutter
-  private var tokenEventSink: EventChannel.EventSink? = null
-  private var notificationEventSink: EventChannel.EventSink? = null
-  
-  // Store pending background notifications
-  private val pendingBackgroundNotifications = CopyOnWriteArrayList<Map<String, Any>>()
-  
-  // Store initial notification if app was launched from a notification
-  private var initialNotification: Map<String, Any>? = null
-  
-  // Main thread handler for posting events to Flutter
-  private val mainHandler = Handler(Looper.getMainLooper())
-
-  override fun onAttachedToEngine(@NonNull binding: FlutterPlugin.FlutterPluginBinding) {
-    channel = MethodChannel(binding.binaryMessenger, CHANNEL_NAME)
-    channel.setMethodCallHandler(this)
-
-    // Set up event channels
-    tokenEventChannel = EventChannel(binding.binaryMessenger, TOKEN_EVENT_CHANNEL)
-    tokenEventChannel.setStreamHandler(object : EventChannel.StreamHandler {
-      override fun onListen(arguments: Any?, events: EventChannel.EventSink) {
-        tokenEventSink = events
-      }
-      
-      override fun onCancel(arguments: Any?) {
-        tokenEventSink = null
-      }
-    })
-    
-    notificationEventChannel = EventChannel(binding.binaryMessenger, NOTIFICATION_EVENT_CHANNEL)
-    notificationEventChannel.setStreamHandler(object : EventChannel.StreamHandler {
-      override fun onListen(arguments: Any?, events: EventChannel.EventSink) {
-        notificationEventSink = events
-        // Deliver any pending notifications when stream is ready
-        deliverPendingNotifications()
-      }
-      
-      override fun onCancel(arguments: Any?) {
-        notificationEventSink = null
-      }
-    })
-    
-    flutterPluginBinding = binding
-    context = binding.applicationContext
-    
-    // Set the static instance
-    setInstance(this)
-  }
-
-  override fun onMethodCall(@NonNull call: MethodCall, @NonNull result: Result) {
-    try {
-      when (call.method) {
-        "initialize" -> {
-          val apiKey = call.argument<String>("apiKey")
-          if (apiKey != null) {
-            // Initialize Klaviyo with the API key and application context
-            Klaviyo.initialize(apiKey, context)
-            Klaviyo.registerForLifecycleCallbacks(context)
-            result.success(true)
-          } else {
-            result.error("INVALID_ARGUMENTS", "API key is required", null)
-          }
-        }
-        "setProfile" -> {
-          try {
-            val profilePropertiesRaw = call.arguments<Map<String, Any>?>()
-
-            if (profilePropertiesRaw == null) {
-              result.error("Profile update error", "No properties passed", null)
-              return
+        
+        /**
+         * Handle push notification intent for tracking opens.
+         * Similar to iOS handleNotificationResponse method.
+         * This can be called from MainActivity if automatic handling is not sufficient.
+         * 
+         * Example usage in MainActivity:
+         * ```
+         * override fun onCreate(savedInstanceState: Bundle?) {
+         *     super.onCreate(savedInstanceState)
+         *     // ... other initialization code
+         *     
+         *     // Handle intent if app was launched from notification
+         *     KlaviyoSdkPlugin.handlePushIntentFromActivity(intent)
+         * }
+         * 
+         * override fun onNewIntent(intent: Intent?) {
+         *     super.onNewIntent(intent)
+         *     // Handle new intent (e.g., from notification tap)
+         *     KlaviyoSdkPlugin.handlePushIntentFromActivity(intent)
+         * }
+         * ```
+         */
+        @JvmStatic
+        fun handlePushIntent(intent: Intent?) {
+            instance?.let { plugin ->
+                try {
+                    // Call Klaviyo SDK to track push notification opens
+                    Klaviyo.handlePush(intent)
+                    
+                    // Extract notification data and emit to event stream
+                    intent?.extras?.let { extras ->
+                        val payload = mutableMapOf<String, Any?>()
+                        for (key in extras.keySet()) {
+                            val value = extras.get(key)
+                            if (value is Serializable) {
+                                payload[key] = value
+                            }
+                        }
+                        plugin.eventSink?.success(payload)
+                    }
+                } catch (e: Exception) {
+                    Log.e("KlaviyoSDK", "Error handling push intent from activity", e)
+                }
             }
+        }
+        
+    }
 
-            val profileProperties = convertMapToSeralizedMap(profilePropertiesRaw)
+    private lateinit var methodChannel: MethodChannel
+    private lateinit var eventChannel: EventChannel
+    private var eventSink: EventChannel.EventSink? = null
 
-            val customProperties =
-                    profileProperties["properties"] as Map<String, Serializable>?
+    private var activity: Activity? = null
+    private var applicationContext: Context? = null
 
-            val email = profileProperties["email"] as? String
-            val externalId = profileProperties["externalId"] as? String
-            val phoneNumber = profileProperties["phoneNumber"] as? String
-            val firstName = profileProperties["firstName"] as? String
-            val lastName = profileProperties["lastName"] as? String
-            val propertyMap = mutableMapOf<ProfileKey, Serializable>()
 
-            customProperties?.forEach { (key, value) ->
-              propertyMap[ProfileKey.CUSTOM(key)] = value
+    override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+        methodChannel = MethodChannel(binding.binaryMessenger, METHOD_CHANNEL_NAME)
+        methodChannel.setMethodCallHandler(this)
+
+        eventChannel = EventChannel(binding.binaryMessenger, EVENT_CHANNEL_NAME)
+        eventChannel.setStreamHandler(this)
+        
+        // Set static instance for MainActivity access
+        instance = this
+
+        // Keep a reference to Application Context for initialization
+        applicationContext = binding.applicationContext
+    }
+
+    override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+        methodChannel.setMethodCallHandler(null)
+        eventChannel.setStreamHandler(null)
+        
+        // Clear static instance
+        instance = null
+
+        applicationContext = null
+    }
+
+    // EventChannel.StreamHandler
+    override fun onListen(arguments: Any?, events: EventChannel.EventSink) {
+        eventSink = events
+    }
+
+    override fun onCancel(arguments: Any?) {
+        eventSink = null
+    }
+
+    override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
+        when (call.method) {
+            "getPlatformVersion" -> {
+                result.success("Android ${Build.VERSION.RELEASE}")
             }
-            
-            // Add firstName and lastName if provided
-            firstName?.let { propertyMap[ProfileKey.FIRST_NAME] = it }
-            lastName?.let { propertyMap[ProfileKey.LAST_NAME] = it }
-
-            val profile = Profile(
-              externalId = externalId,
-              email = email,
-              phoneNumber = phoneNumber,
-              properties = if (propertyMap.isEmpty()) null else propertyMap
-            )
-          
-            Klaviyo.setProfile(profile)
-
-            result.success("Profile updated")
-          } catch (e: Exception) {
-            result.error("Profile update error", e.message, e)
-          }
-        }
-        "resetProfile" -> {
-          // Reset the current profile
-          Klaviyo.resetProfile()
-          result.success(true)
-        }
-        "createEvent" -> {
-          val eventName = call.argument<String>("name")
-          val metaDataRaw = call.argument<Map<String, Any>?>("properties")
-          
-          if (eventName != null && metaDataRaw != null) {
-            val event = Event(EventMetric.CUSTOM(eventName))
-
-            val metaData = convertMapToSeralizedMap(metaDataRaw)
-
-            for (item in metaData) {
-                event.setProperty(EventKey.CUSTOM(item.key), value = item.value)
+            "initialize" -> {
+                val apiKey: String? = call.argument("apiKey")
+                if (apiKey.isNullOrEmpty()) {
+                    result.error("INVALID_ARGUMENT", "apiKey is required", null)
+                    return
+                }
+                try {
+                    // Prefer engine Application Context; fall back to Activity context if available
+                    val context = applicationContext ?: activity?.applicationContext
+                    if (context == null) {
+                        result.error("NO_CONTEXT", "Application context is not available", null)
+                        return
+                    }
+                    Klaviyo.initialize(apiKey, context)
+                    result.success(true)
+                } catch (t: Throwable) {
+                    result.error("INIT_ERROR", t.message, null)
+                }
             }
-            Klaviyo.createEvent(event)
-
-            result.success("Event[$eventName] created with metadataMap: $metaData")
-          
-          } else {
-            result.error("INVALID_ARGUMENTS", "Event name is required", null)
-          }
-        }
-        "requestPushPermissions" -> {
-          // This is handled by the FCM integration
-          // The app needs to request notification permissions and handle FCM token
-          Log.d("KlaviyoSDK", "Checking notification permission for Android version: ${Build.VERSION.SDK_INT}")
-          // This is only necessary for API level >= 33 (TIRAMISU)
-          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-              if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
-                  PackageManager.PERMISSION_GRANTED
-              ) {
-                  Log.d("KlaviyoSDK", "Notification permission is already granted")
-                  result.success(true)
-              } else {
-                  permissionResult = result
-                  Log.d("KlaviyoSDK", "Need to request notification permission")
-                  ActivityCompat.requestPermissions(
-                    activity!!,
-                    arrayOf(Manifest.permission.POST_NOTIFICATIONS),
-                    PERMISSION_REQUEST_CODE
-                  )
-              }
-          }
-        }
-        "setPushToken" -> {
-          val token = call.argument<String>("token")
-          if (token != null) {
-            // Set the push token
-            Klaviyo.setPushToken(token)
-            result.success(true)
-          } else {
-            result.error("INVALID_ARGUMENTS", "Push token is required", null)
-          }
-        }
-        "getInitialNotification" -> {
-          // Return and clear the initial notification
-          result.success(initialNotification)
-          initialNotification = null
-        }
-        "handlePush" -> {
-          val payload = call.argument<Map<String, Any>?>("payload")
-
-          if(payload != null) {
-            val payloadData = convertMapToSeralizedMap(payload)
-            val dataValue = payloadData["data"]
-            val intentData = if (dataValue is Map<*, *>) {
-                @Suppress("UNCHECKED_CAST")
-                convertMapToSeralizedMap(dataValue as Map<String, Any>)
-            } else {
-                mapOf()
+            "setProfile" -> {
+                try {
+                    val args: Map<String, Any?> = call.arguments as? Map<String, Any?> ?: emptyMap()
+                    setProfileInternal(args)
+                    result.success(true)
+                } catch (t: Throwable) {
+                    result.error("PROFILE_ERROR", t.message, null)
+                }
             }
+            "resetProfile" -> {
+                try {
+                    Klaviyo.resetProfile()
+                    result.success(true)
+                } catch (t: Throwable) {
+                    result.error("RESET_ERROR", t.message, null)
+                }
+            }
+            "createEvent" -> {
+                try {
+                    val name: String? = call.argument("name")
+                    if (name.isNullOrEmpty()) {
+                        result.error("INVALID_ARGUMENT", "name is required", null)
+                        return
+                    }
+                    val properties: Map<String, Any?>? = call.argument("properties")
+                    val value: Double? = call.argument("value")
 
-            if(intentData.containsKey("_k")) {
-              try {
-                val intent = Intent()
-                  .putExtra("com.klaviyo._k","")
-
-                Klaviyo.handlePush(intent)
+                    val event = Event(
+                        metric = EventMetric.CUSTOM(name),
+                        properties = properties?.mapNotNull { (key, v) ->
+                            if (v is Serializable) EventKey.CUSTOM(key) as EventKey to v else null
+                        }?.toMap()
+                    )
+                    if (value != null) {
+                        event.setValue(value)
+                    }
+                    Klaviyo.createEvent(event)
+                    result.success(true)
+                } catch (t: Throwable) {
+                    result.error("EVENT_ERROR", t.message, null)
+                }
+            }
+            "registerForPushNotifications" -> {
+                // Android: push registration typically handled by FCM automatically.
                 result.success(true)
-              } catch (e: Exception) {
-                result.error("Push handle error", e.message, e)
-              }
             }
-
-            result.success(true)
-          }
+            "setPushToken" -> {
+                try {
+                    val token: String? = call.argument("token")
+                    if (token.isNullOrEmpty()) {
+                        result.error("INVALID_ARGUMENT", "token is required", null)
+                        return
+                    }
+                    Klaviyo.setPushToken(token)
+                    result.success(true)
+                } catch (t: Throwable) {
+                    result.error("PUSH_TOKEN_ERROR", t.message, null)
+                }
+            }
+            // Convenience attribute methods used by Dart layer
+            "setExternalId" -> {
+                val value: String? = call.argument("value")
+                if (value.isNullOrEmpty()) return result.error("INVALID_ARGUMENT", "value is required", null)
+                Klaviyo.setExternalId(value)
+                result.success(null)
+            }
+            "getExternalId" -> {
+                result.success(Klaviyo.getExternalId())
+            }
+            "setEmail" -> {
+                val value: String? = call.argument("value")
+                if (value.isNullOrEmpty()) return result.error("INVALID_ARGUMENT", "value is required", null)
+                Klaviyo.setEmail(value)
+                result.success(null)
+            }
+            "getEmail" -> {
+                result.success(Klaviyo.getEmail())
+            }
+            "setPhoneNumber" -> {
+                val value: String? = call.argument("value")
+                if (value.isNullOrEmpty()) return result.error("INVALID_ARGUMENT", "value is required", null)
+                Klaviyo.setPhoneNumber(value)
+                result.success(null)
+            }
+            "getPhoneNumber" -> {
+                result.success(Klaviyo.getPhoneNumber())
+            }
+            "setProfileAttribute" -> {
+                val key: String? = call.argument("propertyKey")
+                val value: String? = call.argument("value")
+                if (key.isNullOrEmpty() || value == null) return result.error("INVALID_ARGUMENT", "propertyKey and value are required", null)
+                Klaviyo.setProfileAttribute(ProfileKey.CUSTOM(key), value)
+                result.success(null)
+            }
+            "getPushToken" -> {
+                result.success(Klaviyo.getPushToken())
+            }
+            "setBadgeCount" -> {
+                // Android generally doesn't support app icon badges natively; no-op
+                result.success(null)
+            }
+            "getEventTypesKeys" -> {
+                result.success(extractConstants<EventMetric>())
+            }
+            "getProfilePropertyKeys" -> {
+                val profileKeys = extractConstants<ProfileKey>().toMutableMap()
+                profileKeys[LOCATION] = LOCATION
+                profileKeys[PROPERTIES] = PROPERTIES
+                result.success(profileKeys)
+            }
+            // TODO: add in-app forms support
+            // Optional: in-app forms support similar to RN module
+            // "registerForInAppForms" -> {
+            //     // No-op without forms dependency
+            //     result.success(true)
+            // }
+            // "unregisterFromInAppForms" -> {
+            //     runOnMainThread {
+            //         try {
+            //             // No-op without forms dependency
+            //         } finally {
+            //             result.success(true)
+            //         }
+            //     }
+            // }
+            else -> result.notImplemented()
         }
-        else -> {
-          result.notImplemented()
-        }
-      }
-    } catch (e: Exception) {
-      val errorDetails = """
-        Error: ${e.message}
-        Stack trace: ${e.stackTraceToString()}
-      """.trimIndent()
-      result.error("KLAVIYO_ERROR", "Error in Klaviyo SDK: ${e.message}", errorDetails)
-    }
-  }
-
-  override fun onDetachedFromEngine(@NonNull binding: FlutterPlugin.FlutterPluginBinding) {
-    flutterPluginBinding = null
-    channel.setMethodCallHandler(null)
-    tokenEventChannel.setStreamHandler(null)
-    notificationEventChannel.setStreamHandler(null)
-    
-    // Clear the static instance if it's this instance
-    if (getInstance() === this) {
-      setInstance(null)
-    }
-  }
-
-  private fun convertMapToSeralizedMap(map: Map<String, Any>): Map<String, Serializable> {
-    val convertedMap = mutableMapOf<String, Serializable>()
-
-    for ((key, value) in map) {
-        if (value is Serializable) {
-            convertedMap[key] = value
-        } else if (value is Map<*, *>) {
-            // Try to convert nested maps
-            @Suppress("UNCHECKED_CAST")
-            val nestedMap = convertMapToSeralizedMap(value as Map<String, Any>)
-            convertedMap[key] = nestedMap as Serializable
-        }
-        // Skip non-serializable values
     }
 
-    return convertedMap
-  }
-  
-  // Handle FCM message and deliver to Flutter
-  fun handleRemoteMessage(remoteMessage: RemoteMessage, fromBackground: Boolean = false) {
-    // Format notification data
-    val notificationData = formatNotificationData(remoteMessage, fromBackground)
-    
-    // Deliver to Flutter or store for later
-    deliverNotification(notificationData)
-    
-  }
-  
-  // Format notification data for Flutter
-  private fun formatNotificationData(remoteMessage: RemoteMessage, fromBackground: Boolean): Map<String, Any> {
-    val data = mutableMapOf<String, Any>()
-    
-    // Add notification content if available
-    remoteMessage.notification?.let { notification ->
-      data["title"] = notification.title ?: ""
-      data["body"] = notification.body ?: ""
-    }
-    
-    // Add data payload
-    data["data"] = remoteMessage.data
-    
-    // Add metadata
-    data["fromBackground"] = fromBackground
-    data["fromTerminated"] = false
-    
-    return data
-  }
-  
-  // Deliver notification to Flutter or store for later
-  fun deliverNotification(notificationData: Map<String, Any>) {
-    try {
-      mainHandler.post {
-        if (notificationEventSink != null) {
-          try {
-            notificationEventSink?.success(notificationData)
-          } catch (e: Exception) {
-            Log.e("KlaviyoSDK", "Error delivering notification to Flutter: ${e.message}")
-          }
+    private fun runOnMainThread(block: () -> Unit) {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            block()
         } else {
-          // Store for later delivery
-          pendingBackgroundNotifications.add(notificationData)
+            Handler(Looper.getMainLooper()).post { block() }
         }
-      }
-    } catch (e: Exception) {
-      Log.e("KlaviyoSDK", "Error in deliverNotification: ${e.message}")
     }
-  }
-  
-  // Deliver pending notifications when Flutter is ready
-  private fun deliverPendingNotifications() {
-    if (notificationEventSink == null) {
-      return
+
+    // ActivityAware to keep current activity reference (for push intents or future use)
+    override fun onAttachedToActivity(binding: ActivityPluginBinding) {
+        activity = binding.activity
     }
-    
-    try {
-      mainHandler.post {
-        if (!pendingBackgroundNotifications.isEmpty()) {
-          for (notification in pendingBackgroundNotifications) {
-            try {
-              notificationEventSink?.success(notification)
-            } catch (e: Exception) {
-              Log.e("KlaviyoSDK", "Error delivering pending notification: ${e.message}")
+
+    override fun onDetachedFromActivityForConfigChanges() {
+        activity = null
+    }
+
+    override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {
+        activity = binding.activity
+    }
+
+    override fun onDetachedFromActivity() {
+        activity = null
+    }
+
+    private fun setProfileInternal(args: Map<String, Any?>) {
+        val profile = Profile()
+
+        // Flatten nested LOCATION and PROPERTIES maps into the profile
+        args.forEach { (key, value) ->
+            when (key) {
+                LOCATION, PROPERTIES -> {
+                    @Suppress("UNCHECKED_CAST")
+                    (value as? Map<String, Any?>)?.forEach { (innerKey, innerValue) ->
+                        if (innerValue is Serializable) {
+                            profile[innerKey] = innerValue
+                        }
+                    }
+                }
+                else -> {
+                    if (value is Serializable) {
+                        // For known fields we could map to typed keys, but the SDK accepts custom keys by string
+                        profile[key] = value
+                    }
+                }
             }
-          }
-          pendingBackgroundNotifications.clear()
         }
-      }
-    } catch (e: Exception) {
-      Log.e("KlaviyoSDK", "Error in deliverPendingNotifications: ${e.message}")
-    }
-  }
-  
-  // Set initial notification (called when app is launched from notification)
-  fun setInitialNotification(notificationData: Map<String, Any>) {
-    initialNotification = notificationData
-  }
-  
-  // Handle FCM token and deliver to Flutter
-  fun handleFcmToken(token: String) {
-    // Set token in Klaviyo
-    Klaviyo.setPushToken(token)
-    
-    // Format token data
-    val tokenData = mapOf(
-      "token" to token,
-      "receivedAt" to System.currentTimeMillis()
-    )
-    
-    // Deliver to Flutter
-    mainHandler.post {
-      tokenEventSink?.success(tokenData)
-    }
-  }
 
-  companion object {
-    private const val PERMISSION_REQUEST_CODE = 123
-    private var permissionResult: Result? = null
-
-    // Static reference to the plugin instance for use in FCM service
-    @JvmStatic
-    private var instance: KlaviyoSdkPlugin? = null
-
-    @JvmStatic
-    fun getInstance(): KlaviyoSdkPlugin? {
-      return instance
+        Klaviyo.setProfile(profile)
     }
 
-    @JvmStatic
-    fun setInstance(plugin: KlaviyoSdkPlugin?) {
-      instance = plugin
-    }
-  }
-
-  override fun onRequestPermissionsResult(
-    requestCode: Int,
-    permissions: Array<String>,
-    grantResults: IntArray
-  ): Boolean {
-    Log.d("KlaviyoSDK", "Permission result received - requestCode: $requestCode")
-
-    if (requestCode == PERMISSION_REQUEST_CODE) {
-      val granted = grantResults.isNotEmpty() &&
-              grantResults[0] == PackageManager.PERMISSION_GRANTED
-
-      Log.d("KlaviyoSDK", "Notification permission ${if (granted) "granted" else "denied"}")
-
-      if (permissionResult == null) {
-        Log.e("KlaviyoSDK", "Permission result callback is null")
-      }
-
-      permissionResult?.success(granted)
-      permissionResult = null
-      return true
-    } else {
-      Log.d("KlaviyoSDK", "Received permission result for unknown request code: $requestCode")
-    }
-    return false
-  }
-
-  override fun onAttachedToActivity(binding: ActivityPluginBinding) {
-    activity = binding.activity
-    binding.addRequestPermissionsResultListener(this)
-  }
-
-  override fun onDetachedFromActivityForConfigChanges() {
-    activity = null
-  }
-
-  override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {
-    activity = binding.activity
-    binding.addRequestPermissionsResultListener(this)
-  }
-
-  override fun onDetachedFromActivity() {
-    activity = null
-  }
+    private inline fun <reified T> extractConstants(): Map<String, String> where T : Keyword =
+        T::class
+            .nestedClasses
+            .filter { it.visibility == KVisibility.PUBLIC && it.objectInstance is T }
+            .associate { nested ->
+                val key = nested.simpleName.toString()
+                val value = (nested.objectInstance as T).name
+                key to value
+            }
 }
+
+
