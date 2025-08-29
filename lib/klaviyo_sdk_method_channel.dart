@@ -7,13 +7,69 @@ import 'klaviyo_sdk_platform_interface.dart';
 
 /// An implementation of [KlaviyoSdkPlatform] that uses method channels.
 class MethodChannelKlaviyoSdk extends KlaviyoSdkPlatform {
+  MethodChannelKlaviyoSdk() {
+    // Ensure handler is registered as soon as the instance is created
+    setupMethodCallHandler();
+  }
   /// The method channel used to interact with the native platform.
   @visibleForTesting
   final methodChannel = const MethodChannel('klaviyo_sdk');
-  
+
   /// The event channel used for streaming messages.
   @visibleForTesting
   final eventChannel = const EventChannel('klaviyo_sdk/notification_events');
+
+  /// Stream controllers for push notifications
+  final StreamController<Map<String, dynamic>?> _messageController =
+      StreamController<Map<String, dynamic>?>.broadcast();
+  final StreamController<Map<String, dynamic>?> _messageOpenedAppController =
+      StreamController<Map<String, dynamic>?>.broadcast();
+
+  /// Flag to track if method call handler is set up
+  bool _isMethodCallHandlerSetup = false;
+
+  /// Set up method call handler to receive push notifications from native side
+  void setupMethodCallHandler() {
+    if (_isMethodCallHandlerSetup) return;
+
+    debugPrint('Klaviyo SDK: Setting up method call handler');
+    methodChannel.setMethodCallHandler(_handleMethodCall);
+    _isMethodCallHandlerSetup = true;
+  }
+
+  /// Handle method calls from native side
+  Future<dynamic> _handleMethodCall(MethodCall call) async {
+    debugPrint('Klaviyo SDK: Received method call: ${call.method}');
+    debugPrint('Klaviyo SDK: Method call arguments: ${call.arguments}');
+
+    switch (call.method) {
+      case 'onPushNotificationReceived':
+        debugPrint('Klaviyo SDK: Processing onPushNotificationReceived');
+        final data = call.arguments as Map<dynamic, dynamic>?;
+        if (data != null) {
+          final mappedData = Map<String, dynamic>.from(data);
+          debugPrint('Klaviyo SDK: Push notification received: $mappedData');
+
+          // Determine which stream to emit to based on the type
+          final type = mappedData['type'] as String?;
+          debugPrint('Klaviyo SDK: Notification type: $type');
+
+          if (type == 'notification_opened') {
+            debugPrint('Klaviyo SDK: Adding to messageOpenedApp stream');
+            _messageOpenedAppController.add(mappedData);
+          } else {
+            debugPrint('Klaviyo SDK: Adding to message stream');
+            _messageController.add(mappedData);
+          }
+        } else {
+          debugPrint('Klaviyo SDK: No data received in method call');
+        }
+        return true;
+      default:
+        debugPrint('Klaviyo SDK: Unknown method call: ${call.method}');
+        return false;
+    }
+  }
 
   @override
   Future<String?> getPlatformVersion() async {
@@ -125,13 +181,39 @@ class MethodChannelKlaviyoSdk extends KlaviyoSdkPlatform {
     }
   }
 
+  Stream<Map<String, dynamic>?> get _allEvents =>
+      eventChannel.receiveBroadcastStream().map((event) {
+        debugPrint('Klaviyo SDK Received event: $event');
+        if (event is Map) {
+          return Map<String, dynamic>.from(event);
+        }
+        return null;
+      }).where((e) => e != null);
+
   @override
-  Stream<Map<String, dynamic>?> get onMessageReceived {
-    return eventChannel.receiveBroadcastStream().map((event) {
-      if (event is Map) {
-        return Map<String, dynamic>.from(event);
-      }
-      return null;
+  Stream<Map<String, dynamic>?> get onMessage {
+    debugPrint('Klaviyo SDK: onMessage stream accessed');
+
+    return _messageController.stream.map((event) {
+      debugPrint('Klaviyo SDK: onMessage stream emitted event: $event');
+      return event;
     });
+  }
+
+  @override
+  Stream<Map<String, dynamic>?> get onMessageOpenedApp {
+    debugPrint('Klaviyo SDK: onMessageOpenedApp stream accessed');
+
+    return _messageOpenedAppController.stream.map((event) {
+      debugPrint(
+          'Klaviyo SDK: onMessageOpenedApp stream emitted event: $event');
+      return event;
+    });
+  }
+
+  /// Clean up resources
+  void dispose() {
+    _messageController.close();
+    _messageOpenedAppController.close();
   }
 }

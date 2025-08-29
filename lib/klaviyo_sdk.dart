@@ -7,22 +7,24 @@ class KlaviyoSdk {
   KlaviyoSdk._internal();
   static final KlaviyoSdk instance = KlaviyoSdk._internal();
 
-  /// Stream that emits events when Klaviyo messages are received
-  /// Listen to this stream to handle incoming Klaviyo notifications
-  ///
-  /// Example:
-  /// ```dart
-  /// KlaviyoSdk.instance.onMessageReceived.listen((payload) {
-  ///   print('Klaviyo message received: $payload');
-  ///   // Handle the message here
-  /// });
-  /// ```
-  Stream<Map<String, dynamic>?> get onMessageReceived {
+  /// Foreground and data messages (FirebaseMessaging.onMessage equivalent)
+  Stream<Map<String, dynamic>?> get onMessage {
+    if (KlaviyoSdkPlatform.instance is MethodChannelKlaviyoSdk) {
+      final stream =
+          (KlaviyoSdkPlatform.instance as MethodChannelKlaviyoSdk).onMessage;
+      return stream.map((event) {
+        return event;
+      });
+    }
+    return const Stream.empty();
+  }
+
+  /// Notification tap/open events (FirebaseMessaging.onMessageOpenedApp equivalent)
+  Stream<Map<String, dynamic>?> get onMessageOpenedApp {
     if (KlaviyoSdkPlatform.instance is MethodChannelKlaviyoSdk) {
       return (KlaviyoSdkPlatform.instance as MethodChannelKlaviyoSdk)
-          .onMessageReceived;
+          .onMessageOpenedApp;
     }
-    // Fallback to empty stream if not using method channel
     return const Stream.empty();
   }
 
@@ -30,20 +32,9 @@ class KlaviyoSdk {
     return KlaviyoSdkPlatform.instance.getPlatformVersion();
   }
 
-  Future<bool> initialize(String apiKey) {
+  Future<bool> initialize(String apiKey) async {
     return KlaviyoSdkPlatform.instance.initialize(apiKey);
   }
-
-  // TODO: Add inAppForms support
-  // Future<bool> registerForInAppForms({Duration? sessionTimeoutDuration}) async {
-  //   // Forms integration disabled; return success no-op
-  //   return true;
-  // }
-
-  // Future<bool> unregisterFromInAppForms() async {
-  //   // Forms integration disabled; return success no-op
-  //   return true;
-  // }
 
   Future<bool> setProfile({
     String? email,
@@ -54,15 +45,6 @@ class KlaviyoSdk {
     Map<String, dynamic>? location,
     Map<String, dynamic>? properties,
   }) {
-    final args = <String, dynamic>{
-      if (email != null) 'email': email,
-      if (phoneNumber != null) 'phoneNumber': phoneNumber,
-      if (externalId != null) 'externalId': externalId,
-      if (firstName != null) 'firstName': firstName,
-      if (lastName != null) 'lastName': lastName,
-      if (location != null) 'location': location,
-      if (properties != null) 'properties': properties,
-    };
     return KlaviyoSdkPlatform.instance.setProfile(
       email: email,
       phoneNumber: phoneNumber,
@@ -147,5 +129,15 @@ class KlaviyoSdk {
         .invokeMethod<Map<dynamic, dynamic>>('getProfilePropertyKeys');
     return map?.map((key, value) => MapEntry(key as String, value as String)) ??
         <String, String>{};
+  }
+
+  KlaviyoPushNotification? getPushNotification(Map<String, dynamic> map) {
+    if (map.isEmpty) {
+      return null;
+    }
+    if (map.containsKey('_k')) {
+      return KlaviyoPushNotification.fromMap(map);
+    }
+    return null;
   }
 }

@@ -30,11 +30,10 @@ import com.klaviyo.analytics.model.ProfileKey
  * Flutter plugin bridging Klaviyo Android SDK via MethodChannel/EventChannel.
  */
 class KlaviyoSdkPlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
-    EventChannel.StreamHandler, ActivityAware {
+    ActivityAware, io.flutter.plugin.common.PluginRegistry.NewIntentListener {
 
     companion object {
         private const val METHOD_CHANNEL_NAME = "klaviyo_sdk"
-        private const val EVENT_CHANNEL_NAME = "klaviyo_sdk/notification_events"
 
         private const val LOCATION = "location"
         private const val PROPERTIES = "properties"
@@ -45,73 +44,24 @@ class KlaviyoSdkPlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
         
         @JvmStatic
         fun getInstance(): KlaviyoSdkPlugin? = instance
-
-        
-        /**
-         * Handle push notification intent for tracking opens.
-         * Similar to iOS handleNotificationResponse method.
-         * This can be called from MainActivity if automatic handling is not sufficient.
-         * 
-         * Example usage in MainActivity:
-         * ```
-         * override fun onCreate(savedInstanceState: Bundle?) {
-         *     super.onCreate(savedInstanceState)
-         *     // ... other initialization code
-         *     
-         *     // Handle intent if app was launched from notification
-         *     KlaviyoSdkPlugin.handlePushIntentFromActivity(intent)
-         * }
-         * 
-         * override fun onNewIntent(intent: Intent?) {
-         *     super.onNewIntent(intent)
-         *     // Handle new intent (e.g., from notification tap)
-         *     KlaviyoSdkPlugin.handlePushIntentFromActivity(intent)
-         * }
-         * ```
-         */
-        @JvmStatic
-        fun handlePushIntent(intent: Intent?) {
-            instance?.let { plugin ->
-                try {
-                    // Call Klaviyo SDK to track push notification opens
-                    Klaviyo.handlePush(intent)
-                    
-                    // Extract notification data and emit to event stream
-                    intent?.extras?.let { extras ->
-                        val payload = mutableMapOf<String, Any?>()
-                        for (key in extras.keySet()) {
-                            val value = extras.get(key)
-                            if (value is Serializable) {
-                                payload[key] = value
-                            }
-                        }
-                        plugin.eventSink?.success(payload)
-                    }
-                } catch (e: Exception) {
-                    Log.e("KlaviyoSDK", "Error handling push intent from activity", e)
-                }
-            }
-        }
         
     }
 
     private lateinit var methodChannel: MethodChannel
     private lateinit var eventChannel: EventChannel
-    private var eventSink: EventChannel.EventSink? = null
 
     private var activity: Activity? = null
     private var applicationContext: Context? = null
 
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+        Log.d("KlaviyoSDK", "onAttachedToEngine called")
         methodChannel = MethodChannel(binding.binaryMessenger, METHOD_CHANNEL_NAME)
         methodChannel.setMethodCallHandler(this)
-
-        eventChannel = EventChannel(binding.binaryMessenger, EVENT_CHANNEL_NAME)
-        eventChannel.setStreamHandler(this)
         
         // Set static instance for MainActivity access
         instance = this
+        Log.d("KlaviyoSDK", "Plugin instance set: ${instance != null}")
 
         // Keep a reference to Application Context for initialization
         applicationContext = binding.applicationContext
@@ -119,7 +69,8 @@ class KlaviyoSdkPlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         methodChannel.setMethodCallHandler(null)
-        eventChannel.setStreamHandler(null)
+
+        Log.d("Klaviyo SDK", "OnDetachedFromEngine: methodChannel set to null")
         
         // Clear static instance
         instance = null
@@ -127,14 +78,6 @@ class KlaviyoSdkPlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
         applicationContext = null
     }
 
-    // EventChannel.StreamHandler
-    override fun onListen(arguments: Any?, events: EventChannel.EventSink) {
-        eventSink = events
-    }
-
-    override fun onCancel(arguments: Any?) {
-        eventSink = null
-    }
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
@@ -261,6 +204,16 @@ class KlaviyoSdkPlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
                 // Android generally doesn't support app icon badges natively; no-op
                 result.success(null)
             }
+            "sendPushNotificationToFlutter" -> {
+                // This is called from Android side to send push notifications to Flutter
+                val data: Map<String, Any?>? = call.arguments as? Map<String, Any?>
+                if (data != null) {
+                    sendPushNotificationViaMethodChannel(data)
+                    result.success(true)
+                } else {
+                    result.error("INVALID_DATA", "Push notification data is null", null)
+                }
+            }
             "getEventTypesKeys" -> {
                 result.success(extractConstants<EventMetric>())
             }
@@ -300,6 +253,11 @@ class KlaviyoSdkPlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
     // ActivityAware to keep current activity reference (for push intents or future use)
     override fun onAttachedToActivity(binding: ActivityPluginBinding) {
         activity = binding.activity
+        // Listen for intents when the app is opened from a notification
+        binding.addOnNewIntentListener(this)
+
+        // Handle the intent that launched the activity (cold start or resume)
+        tryHandleNotificationIntent(activity?.intent)
     }
 
     override fun onDetachedFromActivityForConfigChanges() {
@@ -308,10 +266,43 @@ class KlaviyoSdkPlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
 
     override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {
         activity = binding.activity
+        binding.addOnNewIntentListener(this)
+        tryHandleNotificationIntent(activity?.intent)
     }
 
     override fun onDetachedFromActivity() {
         activity = null
+    }
+
+    /**
+     * Handle intents delivered to the Activity when a user taps a notification.
+     * Emits an event to Flutter similar to FirebaseMessaging.onMessageOpenedApp.
+     */
+    override fun onNewIntent(intent: Intent): Boolean {
+        tryHandleNotificationIntent(intent)
+        return false
+    }
+
+    private fun tryHandleNotificationIntent(intent: Intent?) {
+        if (intent == null) return
+        try {
+            Klaviyo.handlePush(intent)
+
+            // Extract payload and forward to Flutter as an "opened" event
+            val payload = mutableMapOf<String, Any?>()
+            intent.extras?.keySet()?.forEach { key ->
+                val value = intent.extras?.get(key)
+                if (value is Serializable) {
+                    payload[key] = value
+                }
+            }
+            payload["type"] = "notification_opened"
+            payload["timestamp"] = System.currentTimeMillis()
+            // Use method channel path so Dart handler receives it reliably
+            sendPushNotificationViaMethodChannel(payload)
+        } catch (t: Throwable) {
+            Log.e("KlaviyoSDK", "Error handling notification intent", t)
+        }
     }
 
     private fun setProfileInternal(args: Map<String, Any?>) {
@@ -338,6 +329,30 @@ class KlaviyoSdkPlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
         }
 
         Klaviyo.setProfile(profile)
+    }
+    
+    /**
+     * Send push notification data to Flutter via method channel.
+     * This is a more reliable alternative to event channels.
+     */
+    private fun sendPushNotificationViaMethodChannel(data: Map<String, Any?>) {
+        runOnMainThread {
+            try {
+                Log.d("KlaviyoSDK", "Sending push notification via method channel: $data")
+                Log.d("KlaviyoSDK", "Method channel initialized: ${::methodChannel.isInitialized}")
+                methodChannel.invokeMethod("onPushNotificationReceived", data)
+                Log.d("KlaviyoSDK", "Successfully invoked method channel")
+            } catch (t: Throwable) {
+                Log.e("KlaviyoSDK", "Error sending push notification via method channel", t)
+            }
+        }
+    }
+
+    /**
+     * Public method to send push notifications from external services (like FCM)
+     */
+    fun sendPushNotificationToFlutter(data: Map<String, Any?>) {
+        sendPushNotificationViaMethodChannel(data)
     }
 
     private inline fun <reified T> extractConstants(): Map<String, String> where T : Keyword =

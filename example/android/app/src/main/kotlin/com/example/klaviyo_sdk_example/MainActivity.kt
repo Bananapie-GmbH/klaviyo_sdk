@@ -6,16 +6,5 @@ import android.os.Bundle
 import com.bananapie.klaviyo_sdk.KlaviyoSdkPlugin
 
 class MainActivity: FlutterActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        
-        onNewIntent(intent)
-    }
-
-    override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent)
-        
-        // Check if app was launched from notification
-        KlaviyoSdkPlugin.handlePushIntent(intent)
-    }
+    
 } 

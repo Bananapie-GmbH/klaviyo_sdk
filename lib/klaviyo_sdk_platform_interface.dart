@@ -2,6 +2,47 @@ import 'package:flutter/services.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 
 import 'klaviyo_sdk_method_channel.dart';
+import 'dart:async' as asy;
+
+class KlaviyoPushNotification {
+  final String? notificationTag;
+  final String? sound;
+  final Map<String, dynamic>? keyValuePairs;
+  final String? body;
+  final String? title;
+  final String? url;
+
+  KlaviyoPushNotification({
+    this.title,
+    this.body,
+    this.notificationTag,
+    this.sound,
+    this.keyValuePairs,
+    this.url,
+  });
+
+  factory KlaviyoPushNotification.fromMap(Map<String, dynamic> map) {
+    return KlaviyoPushNotification(
+      title: map['title'] as String?,
+      body: map['body'] as String?,
+      notificationTag: map['notificationTag'] as String?,
+      sound: map['sound'] as String?,
+      keyValuePairs: map['keyValuePairs'] as Map<String, dynamic>?,
+      url: map['url'] as String?,
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'title': title,
+      'body': body,
+      'notificationTag': notificationTag,
+      'sound': sound,
+      'keyValuePairs': keyValuePairs,
+      'url': url,
+    };
+  }
+}
 
 abstract class KlaviyoSdkPlatform extends PlatformInterface {
   /// Constructs a KlaviyoSdkPlatform.
@@ -31,13 +72,6 @@ abstract class KlaviyoSdkPlatform extends PlatformInterface {
   /// Initialize the Klaviyo SDK with your public API key
   Future<bool> initialize(String apiKey) {
     throw UnimplementedError('initialize() has not been implemented.');
-  }
-
-  /// Handle a deep link
-  Future<bool> setupNativeMethodCalls(
-      Future<dynamic> Function(MethodCall)? handler) {
-    throw UnimplementedError(
-        'setupNativeMethodCalls() has not been implemented.');
   }
 
   /// Set a profile for identification
@@ -78,8 +112,11 @@ abstract class KlaviyoSdkPlatform extends PlatformInterface {
     throw UnimplementedError('setPushToken() has not been implemented.');
   }
 
-  /// Get the stream of messages received from Klaviyo
-  Stream<Map<String, dynamic>?> get onMessageReceived {
-    throw UnimplementedError('onMessageReceived() has not been implemented.');
+  static final asy.StreamController<Map<String, dynamic>?> onMessage =
+      asy.StreamController<Map<String, dynamic>?>.broadcast();
+
+  /// Notification tap/open events (similar to FirebaseMessaging.onMessageOpenedApp)
+  Stream<Map<String, dynamic>?> get onMessageOpenedApp {
+    throw UnimplementedError('onMessageOpenedApp() has not been implemented.');
   }
 }
